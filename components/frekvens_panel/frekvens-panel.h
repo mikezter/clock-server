@@ -23,6 +23,8 @@ class Panel : public PollingComponent,
   }
 
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
+                  
+  display::DisplayType get_display_type() override { return display::DisplayType::DISPLAY_TYPE_BINARY; }
 
   void data(uint8_t value);
 
