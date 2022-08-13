@@ -30,7 +30,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_CONTRAST, default=0x7F): cv.int_,
         }
     )
-    .extend(cv.polling_component_schema("1s")),
+    .extend(cv.polling_component_schema("200ms")),
     cv.has_at_most_one_key(CONF_PAGES, CONF_LAMBDA),
 )
 
