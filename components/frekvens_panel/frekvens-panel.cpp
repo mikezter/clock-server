@@ -25,7 +25,7 @@ size_t Panel::get_buffer_length_() {
 
 void HOT Panel::display() {
   uint8_t x, y, cell;
-  ESP_LOGD(TAG, "Displaying...");
+  ESP_LOGV(TAG, "Displaying...");
 
   this->panel->clear();
   for (x = 0; x < this->get_width_internal(); x++) {
