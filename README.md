@@ -139,3 +139,6 @@ display:
 
 ## License
 [TBD] the original library does not specify the license. This repo is consecutively not licensed yet either.
+
+## Credits
+Thanks to @speckij
