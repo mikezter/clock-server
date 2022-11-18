@@ -71,7 +71,6 @@ font:
 
 display:
   - platform: frekvens_panel
-    rotation: 90
     latch_pin: 12
     clock_pin: 04
     data_pin: 05
