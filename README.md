@@ -1,28 +1,22 @@
-# esphome IKEA LED matrix components for Frekvens & Obegränsad
+# ESPHome IKEA LED matrix components for Frekvens & Obegränsad
+Both Frekvens and Obegränsad are 16 by 16 LED Matrixes from IKEA and they are Hackable for Usage with HomeAssistant / ESPHome.
+This Repository is a custom component for ESPHome to interface these two Matrixes. 
 
-A custom component for esphome to interface with IKEA's Frekvens Cube and Obegränsad panel.
+❗❗❗TODO❗❗❗ I will create a custom PCB for both Frekvens Cube and Obegränsad Panel that you can build yourself for a sleek integration. ❗❗❗TODO❗❗❗
 
-## Sources
+## Wiring
 
-This repo is heavily based on the original [FrekvensPanel library by @frumperino](https://github.com/frumperino/FrekvensPanel).
+You have to wire your ESP32 or ESP8266 according to this Schematics.
 
-It's also inspired from the esphome component PCD8544.
+### Frekvens
 
-## Usage
+❗❗❗TODO❗❗❗
 
-Currently there is a dependency upon Adafruit GFX library. In your esphome config, add these lines:
+### Obegränsad
 
-- Declare necessary libraries
-- Define frekvenspanel component
+❗❗❗TODO❗❗❗
 
-```yaml
-    lib_deps:
-      - Wire                            # Also required by GFX.
-      - SPI                             # Also required by GFX.
-      - adafruit/Adafruit BusIO         # Required by GFX Library.
-      - adafruit/Adafruit GFX Library   # Required for FrekvensPanel.
-      - me-no-dev/ESPAsyncTCP
-```
+## Software
 
 Here is a short config to demonstrate the usage to display time on Frekvens and Obegränsad:
 
@@ -135,9 +129,3 @@ display:
       it.strftime(4, 8, id(b03), "%M", id(ntp_time).now());
 
 ```
-
-## License
-[TBD] the original library does not specify the license. This repo is consecutively not licensed yet either.
-
-## Credits
-Thanks to @speckij
