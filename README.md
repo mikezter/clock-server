@@ -1,5 +1,6 @@
 # ESPHome IKEA LED matrix components for Frekvens & Obegränsad
 Both Frekvens and Obegränsad are 16 by 16 LED Matrixes from IKEA and they are Hackable for Usage with HomeAssistant / ESPHome.
+
 This Repository is a custom component for ESPHome to interface these two Matrixes. 
 
 I will create a custom PCB for both Frekvens Cube and Obegränsad Panel that you can build yourself for a sleek integration. ❗❗❗TODO❗❗❗
