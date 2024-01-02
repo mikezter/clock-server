@@ -36,7 +36,7 @@ esphome:
       - me-no-dev/ESPAsyncTCP
 
 external_components:
-  - source: github://phiten/esphome-ikea-led-matrix@master
+  - source: github://sascha-hemi/esphome-ikea-led-matrix@master
     components: [ frekvens_panel ]
 
 light:
@@ -91,7 +91,7 @@ esphome:
       - me-no-dev/ESPAsyncTCP
 
 external_components:
-  - source: github://phiten/esphome-ikea-led-matrix@master
+  - source: github://saschahemi/esphome-ikea-led-matrix@master
     components: [ obegraensad_panel ]
 
 light:
