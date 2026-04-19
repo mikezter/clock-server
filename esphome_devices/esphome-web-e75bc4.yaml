@@ -1,0 +1,146 @@
+esphome:
+  name: obegraensad-clock
+  friendly_name: IKEA OBEGRÄNSAD
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+  includes:
+    - images.h
+  platformio_options:
+    lib_deps:
+      - Wire                            # Also required by GFX.
+      - SPI                             # Also required by GFX.
+      - adafruit/Adafruit BusIO         # Required by GFX Library.
+      - adafruit/Adafruit GFX Library   # Required for FrekvensPanel.
+      - me-no-dev/ESPAsyncTCP
+      
+external_components:
+  - source: github://sascha-hemi/esphome-ikea-led-matrix@master
+    components: [ obegraensad_panel ]
+
+esp8266:
+  board: d1_mini
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+# Allow Over-The-Air updates
+ota:
+- platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  use_address: 192.168.178.80
+  ap:
+    ssid: "Obegransand Fallback Hotspot"
+    password: !secret ap_password
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+globals:
+  - id: 'image'
+    type: int
+    restore_value: no
+    initial_value: '11'
+  - id: max_img
+    type: int
+    restore_value: no
+    initial_value: '11'       # 0=clock 1=test 2=smiley 3=heart 4=cloud
+                             # 5=sun 6=lightning 7=battery 8=matrix 9=tetris
+script:
+  - id: next_image
+    then:
+      - lambda: |-
+          id(image) = id(image) + 1;
+          if (id(image) > id(max_img)) {
+            id(image) = 0;
+          }
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO13
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Display Button"
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      then:
+        - script.execute: next_image
+        #- light.toggle: display_light
+button:
+  - platform: template
+    name: "Next Image"
+    on_press:
+      then:
+        - script.execute: next_image
+
+light:
+  - platform: monochromatic
+    name: 'Brightness'
+    id: display_light
+    output: matrix_brightness
+    restore_mode: ALWAYS_ON
+
+output:
+  - platform: esp8266_pwm
+    # Enables brightness control.
+    id: matrix_brightness
+    pin:
+      number: GPIO14
+      inverted: True
+
+time:
+  - platform: sntp
+    id: ntp_time
+    timezone: 'Europe/Berlin'
+
+font:
+  - file: "04B03.ttf"
+    id: b03
+    size: 8
+
+display:
+  - platform: obegraensad_panel
+    rotation: 90
+    latch_pin: 12
+    clock_pin: 04
+    data_pin: 05
+    update_interval: 100ms
+
+
+    lambda: |-
+      static int frame = 0;
+      frame++;
+      if (frame > 100000) frame = 0;
+      switch (id(image)) {
+        case 1: draw_image(it, IMG_TEST);      break;
+        case 2: draw_image(it, IMG_SMILEY);    break;
+        case 3: draw_image(it, IMG_HEART);     break;
+        case 4: draw_image(it, IMG_CLOUD);     break;
+        case 5: draw_image(it, IMG_SUN);       break;
+        case 6: draw_image(it, IMG_LIGHTNING); break;
+        case 7: draw_image(it, IMG_BATTERY);   break;
+        case 8: draw_matrix(it, frame); break;
+        case 9: draw_tetris(it, frame); break;
+        case 10: draw_snake(it, frame); break;
+        case 11: draw_image(it, IMG_WHITE);   break;
+        default: {
+          auto now = id(ntp_time).now();
+          if (!now.is_valid()) return;
+          it.strftime(4, 0, id(b03), "%H", now);
+          it.strftime(4, 8, id(b03), "%M", now);
+          break;
+        }
+      }
