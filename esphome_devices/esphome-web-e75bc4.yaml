@@ -135,7 +135,7 @@ display:
         case 8: draw_matrix(it, frame); break;
         case 9: draw_tetris(it, frame); break;
         case 10: draw_snake(it, frame); break;
-        case 11: draw_image(it, IMG_WHITE);   break;
+        // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
         default: {
           auto now = id(ntp_time).now();
           if (!now.is_valid()) return;
