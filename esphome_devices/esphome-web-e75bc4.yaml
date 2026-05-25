@@ -25,6 +25,7 @@ logger:
 
 # Enable Home Assistant API
 api:
+  reboot_timeout: 0s
 
 # Allow Over-The-Air updates
 ota:
@@ -34,7 +35,7 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   min_auth_mode: WPA2
-  use_address: 192.168.178.80
+  use_address: 192.168.178.124
   ap:
     ssid: "Obegransand Fallback Hotspot"
     password: !secret ap_password
@@ -63,6 +64,13 @@ script:
           if (id(image) > id(max_img)) {
             id(image) = 0;
           }
+          
+sensor:
+  - platform: template
+    name: "Free Heap"
+    lambda: 'return ESP.getFreeHeap();'
+    update_interval: 30s
+    unit_of_measurement: "B"
 
 binary_sensor:
   - platform: gpio
@@ -111,6 +119,31 @@ font:
     id: b03
     size: 8
 
+# Outbound HTTP client. verify_ssl:false avoids the ESP8266 TLS cert-pinning
+# headache against rotating *.workers.dev certs. It's a single periodic GET
+# on an otherwise-idle device, so the heap cost is acceptable.
+http_request:
+  verify_ssl: false
+  timeout: 5s
+  useragent: obegraensad-clock
+
+# Poll the Worker every 5s and apply whatever image index it returns.
+interval:
+  - interval: 5s
+    then:
+      - http_request.get:
+          url: "https://clock-server.mikezter.workers.dev/state"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code == 200) {
+                    int v = atoi(body.c_str());
+                    if (v >= 0 && v <= id(max_img)) {
+                      id(image) = v;
+                    }
+                  }
+
 display:
   - platform: obegraensad_panel
     rotation: 90
@@ -136,11 +169,16 @@ display:
         case 9: draw_tetris(it, frame); break;
         case 10: draw_snake(it, frame); break;
         // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
+        case 12: draw_image(it, IMG_CUSTOM);   break; 
         default: {
           auto now = id(ntp_time).now();
-          if (!now.is_valid()) return;
-          it.strftime(4, 0, id(b03), "%H", now);
-          it.strftime(4, 8, id(b03), "%M", now);
+          if (now.is_valid()) {
+            it.strftime(4, 0, id(b03), "%H", now);
+            it.strftime(4, 8, id(b03), "%M", now);
+          } else {
+            it.print(4, 0, id(b03), "--");
+            it.print(4, 8, id(b03), "--");          
+          }
           break;
         }
       }
