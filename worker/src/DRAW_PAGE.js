@@ -6,7 +6,7 @@ export const DRAW_PAGE = `<!doctype html>
 <title>Obegränsad Pixel Editor</title>
 <style>
   :root { --bg:#0e1116; --card:#171c24; --line:#262e3a; --txt:#e6edf3;
-          --muted:#8b97a7; --accent:#ffd23f; --on:#ffd23f; --off:#1b2230; }
+          --muted:#8b97a7; --accent:#ffffff; --on:#ffffff; --off:#1b2230; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
          background:var(--bg); color:var(--txt); min-height:100vh;
@@ -14,20 +14,19 @@ export const DRAW_PAGE = `<!doctype html>
   h1 { font-size:20px; font-weight:600; margin:0 0 4px; }
   p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; text-align:center; }
 
-  /* The panel shows pixels ~2x taller than wide, so each cell is stretched
-     vertically to preview accurately. Grid is 16 wide; cell 22px x 40px. */
-  /* Square pixels. Vertical gap is ~one extra pixel-height of dead space,
-     matching the panel's real row spacing. */
+  /* Geometry scaled from the real panel (pixel 0.5", h-gap 0.28125", v-gap 0.6875").
+     At cell=24px: column-gap = 24*0.5625 ≈ 14px, row-gap = 24*1.375 = 33px.
+     Reproduces the panel's ~27:40 rendering aspect ratio. */
   #panel { display:grid;
            grid-template-columns:repeat(16, 24px);
            grid-template-rows:repeat(16, 24px);
-           column-gap:4px;
-           row-gap:26px;
-           background:#000; padding:10px;
+           column-gap:14px;
+           row-gap:33px;
+           background:#000; padding:14px;
            border-radius:12px; border:1px solid var(--line);
            touch-action:none; user-select:none; }
-  .px { background:var(--off); border-radius:3px; cursor:crosshair; }
-  .px.on { background:var(--on); box-shadow:0 0 6px var(--accent); }
+  .px { background:var(--off); border-radius:2px; cursor:crosshair; }
+  .px.on { background:var(--on); box-shadow:0 0 8px rgba(255,255,255,0.85); }
 
   .bar { display:flex; gap:10px; margin:18px 0; flex-wrap:wrap; justify-content:center; }
   button { appearance:none; border:1px solid var(--line); background:var(--card);
@@ -44,7 +43,7 @@ export const DRAW_PAGE = `<!doctype html>
 <body>
   <h1>Pixel Editor · 16×16</h1>
   <p class="sub">Click or drag to paint · drag from a lit pixel to erase<br>
-     Cells are stretched ~2× tall to match the panel's real geometry</p>
+     Spacing matches the real panel — wide vertical gaps between rows</p>
 
   <div id="panel"></div>
 
