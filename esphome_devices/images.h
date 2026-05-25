@@ -22,7 +22,26 @@ inline void draw_image(esphome::display::Display &it, const Image16x16 &img) {
       }
     }
   }
-}
+};
+
+const Image16x16 IMG_CUSTOM = {
+  0x8810,
+  0x0640,
+  0x0180,
+  0x0FF0,
+  0x1004,
+  0x2662,
+  0x4661,
+  0x4001,
+  0x4000,
+  0x4411,
+  0x2321,
+  0x10C0,
+  0x0402,
+  0x031C,
+  0x00E0,
+  0x0001
+};
 
 // ------------------------------------------------------------
 // Test pattern
