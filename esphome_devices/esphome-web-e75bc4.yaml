@@ -225,6 +225,9 @@ interval:
                           if (v >= 1 && v <= id(max_img)) {
                             id(image) = v;
                             id(showing_image) = true;
+                          } else { 
+                            id(image) = 0;
+                            id(showing_image) = false;
                           }
                         }
 
