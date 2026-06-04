@@ -50,12 +50,16 @@ globals:
   - id: 'image'
     type: int
     restore_value: no
-    initial_value: '11'
+    initial_value: '12'
   - id: max_img
     type: int
     restore_value: no
-    initial_value: '11'       # 0=clock 1=test 2=smiley 3=heart 4=cloud
+    initial_value: '12'       # 0=clock 1=test 2=smiley 3=heart 4=cloud
                              # 5=sun 6=lightning 7=battery 8=matrix 9=tetris
+  - id: custom_rows
+    type: uint16_t[16]
+    restore_value: no
+    initial_value: '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
 script:
   - id: next_image
     then:
@@ -64,6 +68,28 @@ script:
           if (id(image) > id(max_img)) {
             id(image) = 0;
           }
+  - id: fetch_custom
+    mode: single
+    then:
+      - http_request.get:
+          url: "https://clock-server.mikezter.workers.dev/custom"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code == 200) {
+                    int row = 0;
+                    size_t pos = 0;
+                    while (row < 16 && pos <= body.size()) {
+                      size_t end = body.find('\n', pos);
+                      if (end == std::string::npos) {
+                        if (pos < body.size()) id(custom_rows)[row++] = (uint16_t)atoi(body.c_str() + pos);
+                        break;
+                      }
+                      id(custom_rows)[row++] = (uint16_t)atoi(body.c_str() + pos);
+                      pos = end + 1;
+                    }
+                  }
           
 sensor:
   - platform: template
@@ -128,6 +154,8 @@ http_request:
   useragent: obegraensad-clock
 
 # Poll the Worker every 5s and apply whatever image index it returns.
+# Custom image rows are fetched in a separate interval to avoid nesting
+# two HTTP requests inside each other (which blocks the soft WDT).
 interval:
   - interval: 5s
     then:
@@ -143,6 +171,14 @@ interval:
                       id(image) = v;
                     }
                   }
+
+  - interval: 7s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(image) == 12;'
+          then:
+            - script.execute: fetch_custom
 
 display:
   - platform: obegraensad_panel
@@ -169,7 +205,16 @@ display:
         case 9: draw_tetris(it, frame); break;
         case 10: draw_snake(it, frame); break;
         // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
-        case 12: draw_image(it, IMG_CUSTOM);   break; 
+        case 12: {
+          for (int row = 0; row < 16; row++) {
+            uint16_t word = id(custom_rows)[row];
+            for (int col = 0; col < 16; col++) {
+              bool on = word & (1 << (15 - col));
+              it.draw_pixel_at(col, row, on ? Color::WHITE : Color::BLACK);
+            }
+          }
+          break;
+        }
         default: {
           auto now = id(ntp_time).now();
           if (now.is_valid()) {
