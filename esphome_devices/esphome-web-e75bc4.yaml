@@ -50,7 +50,7 @@ globals:
   - id: 'image'
     type: int
     restore_value: no
-    initial_value: '12'
+    initial_value: '0'
   - id: max_img
     type: int
     restore_value: no
@@ -60,14 +60,49 @@ globals:
     type: uint16_t[16]
     restore_value: no
     initial_value: '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
+  - id: showing_image
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: brightness_step
+    type: int
+    restore_value: no
+    initial_value: '2'        # 0=20%  1=40%  2=100%
 script:
-  - id: next_image
+  - id: return_to_clock
     then:
       - lambda: |-
-          id(image) = id(image) + 1;
-          if (id(image) > id(max_img)) {
-            id(image) = 0;
-          }
+          id(showing_image) = false;
+          id(image) = 0;
+
+  - id: cycle_brightness
+    then:
+      - lambda: 'id(brightness_step) = (id(brightness_step) + 1) % 3;'
+      - if:
+          condition:
+            lambda: 'return id(brightness_step) == 0;'
+          then:
+            - light.turn_on:
+                id: display_light
+                brightness: 20%
+                transition_length: 0ms
+      - if:
+          condition:
+            lambda: 'return id(brightness_step) == 1;'
+          then:
+            - light.turn_on:
+                id: display_light
+                brightness: 40%
+                transition_length: 0ms
+      - if:
+          condition:
+            lambda: 'return id(brightness_step) == 2;'
+          then:
+            - light.turn_on:
+                id: display_light
+                brightness: 100%
+                transition_length: 0ms
+
   - id: fetch_custom
     mode: single
     then:
@@ -111,14 +146,13 @@ binary_sensor:
       - delayed_on: 50ms
     on_press:
       then:
-        - script.execute: next_image
-        #- light.toggle: display_light
-button:
-  - platform: template
-    name: "Next Image"
-    on_press:
-      then:
-        - script.execute: next_image
+        - if:
+            condition:
+              lambda: 'return id(showing_image);'
+            then:
+              - script.execute: return_to_clock
+            else:
+              - script.execute: cycle_brightness
 
 light:
   - platform: monochromatic
@@ -153,30 +187,40 @@ http_request:
   timeout: 5s
   useragent: obegraensad-clock
 
-# Poll the Worker every 5s and apply whatever image index it returns.
-# Custom image rows are fetched in a separate interval to avoid nesting
-# two HTTP requests inside each other (which blocks the soft WDT).
+# Poll the Worker every 5s for a new image. Polling stops while an image is
+# locked on screen (showing_image=true). Resumes after the user presses the
+# physical button to dismiss the image.
 interval:
   - interval: 5s
     then:
-      - http_request.get:
-          url: "https://clock-server.mikezter.workers.dev/state"
-          capture_response: true
-          on_response:
-            then:
-              - lambda: |-
-                  if (response->status_code == 200) {
-                    int v = atoi(body.c_str());
-                    if (v >= 0 && v <= id(max_img)) {
-                      id(image) = v;
-                    }
-                  }
+      - if:
+          condition:
+            lambda: 'return !id(showing_image);'
+          then:
+            - http_request.get:
+                url: "https://clock-server.mikezter.workers.dev/state"
+                capture_response: true
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code == 200) {
+                          int v = atoi(body.c_str());
+                          if (v >= 1 && v <= id(max_img)) {
+                            id(image) = v;
+                            id(showing_image) = true;
+                          }
+                        }
+                    - if:
+                        condition:
+                          lambda: 'return id(showing_image) && id(image) == 12;'
+                        then:
+                          - script.execute: fetch_custom
 
   - interval: 7s
     then:
       - if:
           condition:
-            lambda: 'return id(image) == 12;'
+            lambda: 'return id(showing_image) && id(image) == 12;'
           then:
             - script.execute: fetch_custom
 
@@ -193,37 +237,37 @@ display:
       static int frame = 0;
       frame++;
       if (frame > 100000) frame = 0;
-      switch (id(image)) {
-        case 1: draw_image(it, IMG_TEST);      break;
-        case 2: draw_image(it, IMG_SMILEY);    break;
-        case 3: draw_image(it, IMG_HEART);     break;
-        case 4: draw_image(it, IMG_CLOUD);     break;
-        case 5: draw_image(it, IMG_SUN);       break;
-        case 6: draw_image(it, IMG_LIGHTNING); break;
-        case 7: draw_image(it, IMG_BATTERY);   break;
-        case 8: draw_matrix(it, frame); break;
-        case 9: draw_tetris(it, frame); break;
-        case 10: draw_snake(it, frame); break;
-        // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
-        case 12: {
-          for (int row = 0; row < 16; row++) {
-            uint16_t word = id(custom_rows)[row];
-            for (int col = 0; col < 16; col++) {
-              bool on = word & (1 << (15 - col));
-              it.draw_pixel_at(col, row, on ? Color::WHITE : Color::BLACK);
-            }
-          }
-          break;
+      if (!id(showing_image)) {
+        auto now = id(ntp_time).now();
+        if (now.is_valid()) {
+          it.strftime(4, 0, id(b03), "%H", now);
+          it.strftime(4, 8, id(b03), "%M", now);
+        } else {
+          it.print(4, 0, id(b03), "--");
+          it.print(4, 8, id(b03), "--");
         }
-        default: {
-          auto now = id(ntp_time).now();
-          if (now.is_valid()) {
-            it.strftime(4, 0, id(b03), "%H", now);
-            it.strftime(4, 8, id(b03), "%M", now);
-          } else {
-            it.print(4, 0, id(b03), "--");
-            it.print(4, 8, id(b03), "--");          
+      } else {
+        switch (id(image)) {
+          case 1: draw_image(it, IMG_TEST);      break;
+          case 2: draw_image(it, IMG_SMILEY);    break;
+          case 3: draw_image(it, IMG_HEART);     break;
+          case 4: draw_image(it, IMG_CLOUD);     break;
+          case 5: draw_image(it, IMG_SUN);       break;
+          case 6: draw_image(it, IMG_LIGHTNING); break;
+          case 7: draw_image(it, IMG_BATTERY);   break;
+          case 8: draw_matrix(it, frame);        break;
+          case 9: draw_tetris(it, frame);        break;
+          case 10: draw_snake(it, frame);        break;
+          // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
+          case 12: {
+            for (int row = 0; row < 16; row++) {
+              uint16_t word = id(custom_rows)[row];
+              for (int col = 0; col < 16; col++) {
+                bool on = word & (1 << (15 - col));
+                it.draw_pixel_at(col, row, on ? Color::WHITE : Color::BLACK);
+              }
+            }
+            break;
           }
-          break;
         }
       }
