@@ -51,6 +51,7 @@ export const DRAW_PAGE = `<!doctype html>
     <button id="clear">Clear</button>
     <button id="invert">Invert</button>
     <button id="copy">Copy C array</button>
+    <button id="send">Send to clock</button>
   </div>
 
   <div id="out"></div>
@@ -123,6 +124,28 @@ export const DRAW_PAGE = `<!doctype html>
       const t = b.textContent; b.textContent = "Copied ✓";
       setTimeout(() => b.textContent = t, 1200);
     });
+  };
+
+  document.getElementById("send").onclick = async () => {
+    const rows = grid.map(row => {
+      let word = 0;
+      for (let c = 0; c < N; c++) if (row[c]) word |= (1 << (15 - c));
+      return word;
+    });
+    const b = document.getElementById("send");
+    const t = b.textContent;
+    b.textContent = "Sending…"; b.disabled = true;
+    try {
+      const r = await fetch("/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      b.textContent = r.ok ? "Sent ✓" : "Error " + r.status;
+    } catch (e) {
+      b.textContent = "Failed";
+    }
+    setTimeout(() => { b.textContent = t; b.disabled = false; }, 2000);
   };
 
   // Each row is a 16-bit value. Bit 15 = leftmost column (c=0), bit 0 = rightmost.
