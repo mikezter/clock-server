@@ -85,6 +85,32 @@ export default {
       });
     }
 
+    if (url.pathname === "/custom" && request.method === "GET") {
+      const raw = await env.CLOCK.get("custom_img");
+      const rows = raw ? JSON.parse(raw) : new Array(16).fill(0);
+      return new Response(rows.join("\n"), {
+        headers: { "Content-Type": "text/plain", ...cors },
+      });
+    }
+
+    if (url.pathname === "/custom" && request.method === "POST") {
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (e) {
+        return new Response("bad json", { status: 400, headers: cors });
+      }
+      const rows = body.rows;
+      if (!Array.isArray(rows) || rows.length !== 16 || !rows.every(v => Number.isInteger(v) && v >= 0 && v <= 65535)) {
+        return new Response("rows must be 16 integers 0–65535", { status: 400, headers: cors });
+      }
+      await env.CLOCK.put("custom_img", JSON.stringify(rows));
+      await env.CLOCK.put("state", JSON.stringify({ img: 12, expiresAt: null }));
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...cors },
+      });
+    }
+
     return new Response("not found", { status: 404, headers: cors });
   },
 };
