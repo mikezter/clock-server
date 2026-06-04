@@ -74,6 +74,8 @@ script:
       - lambda: |-
           id(showing_image) = false;
           id(image) = 0;
+      - http_request.post:
+          url: "https://clock-server.mikezter.workers.dev/reset"
 
   - id: cycle_brightness
     then:
