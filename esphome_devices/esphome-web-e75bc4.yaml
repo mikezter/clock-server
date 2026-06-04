@@ -227,11 +227,6 @@ interval:
                             id(showing_image) = true;
                           }
                         }
-                    - if:
-                        condition:
-                          lambda: 'return id(showing_image) && id(image) == 12;'
-                        then:
-                          - script.execute: fetch_custom
 
   - interval: 7s
     then:
