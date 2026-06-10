@@ -68,6 +68,14 @@ globals:
     type: int
     restore_value: no
     initial_value: '4'        # 0=0%  1=20%  2=40%  3=60%  4=100%
+  - id: night_brightness
+    type: float
+    restore_value: no
+    initial_value: '0.15'     # ← calibrate: lowest visible level before LEDs cut off
+  - id: manual_override_until
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'        # millis() timestamp; 0 = no override
 script:
   - id: return_to_clock
     then:
@@ -79,7 +87,9 @@ script:
 
   - id: cycle_brightness
     then:
-      - lambda: 'id(brightness_step) = (id(brightness_step) + 1) % 5;'
+      - lambda: |-
+          id(brightness_step) = (id(brightness_step) + 1) % 5;
+          id(manual_override_until) = millis() + 3600000UL;
       - if:
           condition:
             lambda: 'return id(brightness_step) == 0;'
@@ -186,6 +196,11 @@ output:
       number: GPIO14
       inverted: True
 
+sun:
+  id: sun_component
+  latitude: 52.52°N   # Berlin
+  longitude: 13.41°E
+
 time:
   - platform: sntp
     id: ntp_time
@@ -235,6 +250,30 @@ interval:
             lambda: 'return id(showing_image) && id(image) == 12;'
           then:
             - script.execute: fetch_custom
+
+  # Sun-synced brightness. Skipped for 1h after the user manually cycles brightness.
+  # Elevation curve: ≤-6° → night_brightness, ≥20° → 100%, linear between.
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(manual_override_until) == 0 || millis() >= id(manual_override_until);'
+          then:
+            - lambda: |-
+                float elev = id(sun_component).elevation();
+                float nb = id(night_brightness);
+                float bri;
+                if (elev <= -6.0f) {
+                  bri = nb;
+                } else if (elev >= 20.0f) {
+                  bri = 1.0f;
+                } else {
+                  bri = nb + (1.0f - nb) * (elev + 6.0f) / 26.0f;
+                }
+                auto call = id(display_light).make_call();
+                call.set_brightness(bri);
+                call.set_transition_length(60000);
+                call.perform();
 
 display:
   - platform: obegraensad_panel
