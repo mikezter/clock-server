@@ -138,7 +138,7 @@ The current config targets an ESP8266 (D1 Mini). The ESP8266 services WiFi in so
 
 1. Extends `esphome::display::DisplayBuffer` directly — rotation and clipping come from ESPHome
 2. Keeps the frame as 16 × `uint16_t` (256 bits, 32 bytes), already in shift-out order; `draw_absolute_pixel_internal(x, y, color)` maps (x, y) through the lookup tables and sets one bit
-3. Shifts the frame out via ESPHome `InternalGPIOPin::digital_write` + `delayMicroseconds`
+3. Shifts the frame out via ESPHome `ISRInternalGPIOPin` (direct GPIO register writes, no Arduino `digitalWrite` overhead), keeping the original 1µs clock/latch pulses
 4. Has zero external library dependencies
 
 The display update cycle:

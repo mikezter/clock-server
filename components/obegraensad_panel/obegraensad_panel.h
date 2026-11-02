@@ -36,6 +36,10 @@ class ObegraensadPanel : public display::DisplayBuffer {
   InternalGPIOPin *latch_pin_{nullptr};
   InternalGPIOPin *clock_pin_{nullptr};
   InternalGPIOPin *data_pin_{nullptr};
+  // Direct register access for the shift-out loop (skips Arduino digitalWrite overhead).
+  ISRInternalGPIOPin latch_;
+  ISRInternalGPIOPin clock_;
+  ISRInternalGPIOPin data_;
 
   // LED with index i lives at frame_[i % 16], bit (i / 16).
   uint16_t frame_[SIZE]{};

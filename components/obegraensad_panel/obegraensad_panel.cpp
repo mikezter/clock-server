@@ -39,8 +39,11 @@ void ObegraensadPanel::setup() {
   this->latch_pin_->setup();
   this->clock_pin_->setup();
   this->data_pin_->setup();
-  this->latch_pin_->digital_write(false);
-  this->clock_pin_->digital_write(false);
+  this->latch_ = this->latch_pin_->to_isr();
+  this->clock_ = this->clock_pin_->to_isr();
+  this->data_ = this->data_pin_->to_isr();
+  this->latch_.digital_write(false);
+  this->clock_.digital_write(false);
 }
 
 void ObegraensadPanel::dump_config() {
@@ -77,16 +80,16 @@ void HOT ObegraensadPanel::draw_absolute_pixel_internal(int x, int y, Color colo
 void HOT ObegraensadPanel::write_frame_() {
   for (uint16_t word : this->frame_) {
     for (int bit = 0; bit < 16; bit++) {
-      this->data_pin_->digital_write(word & 0x01);
+      this->data_.digital_write(word & 0x01);
       word >>= 1;
-      this->clock_pin_->digital_write(true);
+      this->clock_.digital_write(true);
       delayMicroseconds(1);
-      this->clock_pin_->digital_write(false);
+      this->clock_.digital_write(false);
     }
   }
-  this->latch_pin_->digital_write(true);
+  this->latch_.digital_write(true);
   delayMicroseconds(1);
-  this->latch_pin_->digital_write(false);
+  this->latch_.digital_write(false);
 }
 
 }  // namespace obegraensad_panel
