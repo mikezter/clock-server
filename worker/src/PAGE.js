@@ -22,6 +22,9 @@ export const PAGE = `<!doctype html>
   button .lbl { font-size:13px; color:var(--muted); }
   .clock { grid-column:1 / -1; background:transparent; }
   #status { margin-top:20px; font-size:13px; color:var(--muted); min-height:18px; }
+  .draw-link { margin-top:16px; font-size:13px; color:var(--muted); }
+  .draw-link a { color:var(--accent); text-decoration:none; }
+  .draw-link a:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -29,6 +32,7 @@ export const PAGE = `<!doctype html>
   <p class="sub">Tap to push to the clock · reverts after 60s</p>
   <div class="grid" id="grid"></div>
   <div id="status"></div>
+  <p class="draw-link"><a href="/draw">🎨 Pixel editor</a></p>
 <script>
   // image index -> label/icon. Matches your ESPHome globals:
   // 0=clock 1=test 2=smiley 3=heart 4=cloud 5=sun 6=lightning 7=battery 8=matrix 9=tetris
@@ -56,7 +60,7 @@ export const PAGE = `<!doctype html>
   const clk = document.createElement("button");
   clk.className = "clock";
   clk.innerHTML = '<span class="lbl">↩ Back to clock now</span>';
-  clk.onclick = () => send(0, 0, "Clock");
+  clk.onclick = () => reset();
   grid.appendChild(clk);
 
   async function send(img, ttl, label) {
@@ -69,6 +73,17 @@ export const PAGE = `<!doctype html>
       });
       if (!r.ok) throw new Error(r.status);
       status.textContent = label + " sent ✓" + (ttl>0 ? " (reverts in "+ttl+"s)" : "");
+    } catch (e) {
+      status.textContent = "Failed: " + e.message;
+    }
+  }
+
+  async function reset() {
+    status.textContent = "Returning to clock…";
+    try {
+      const r = await fetch("/reset", { method:"POST" });
+      if (!r.ok) throw new Error(r.status);
+      status.textContent = "Back to clock ✓";
     } catch (e) {
       status.textContent = "Failed: " + e.message;
     }

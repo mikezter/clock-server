@@ -72,6 +72,14 @@ export default {
       });
     }
 
+    // --- Reset to clock mode immediately (device dismiss signal) ---
+    if (url.pathname === "/reset" && request.method === "POST") {
+      await env.CLOCK.put("state", JSON.stringify({ img: DEFAULT_IMG, expiresAt: null }));
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...cors },
+      });
+    }
+
     // --- Control webpage ---
     if (url.pathname === "/") {
       return new Response(PAGE, {
