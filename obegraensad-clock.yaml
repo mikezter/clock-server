@@ -72,13 +72,15 @@ globals:
     restore_value: no
     initial_value: '0'        # millis() timestamp; 0 = no override
 script:
+  # POST first, then reset locally: otherwise a poll in between can still
+  # see the old image on the Worker and lock it again.
   - id: return_to_clock
     then:
+      - http_request.post:
+          url: "https://clock-server.mikezter.workers.dev/reset"
       - lambda: |-
           id(showing_image) = false;
           id(image) = 0;
-      - http_request.post:
-          url: "https://clock-server.mikezter.workers.dev/reset"
 
   - id: cycle_brightness
     then:
@@ -155,6 +157,12 @@ sensor:
     update_interval: 30s
     unit_of_measurement: "B"
 
+button:
+  - platform: template
+    name: "Back to Clock"
+    on_press:
+      - script.execute: return_to_clock
+
 binary_sensor:
   - platform: gpio
     pin:
@@ -214,37 +222,33 @@ http_request:
   timeout: 5s
   useragent: obegraensad-clock
 
-# Poll the Worker every 5s for a new image. Polling stops while an image is
-# locked on screen (showing_image=true). Resumes after the user presses the
-# physical button to dismiss the image.
+# Poll the Worker every 5s and follow its state: 1..max_img shows that image,
+# 0 returns to the clock (the Worker's TTL expired or someone hit /reset).
+# Errors / non-200 keep whatever is on screen. The custom drawing is fetched
+# right after, in sequence, so two TLS sessions never overlap on the ESP8266.
 interval:
   - interval: 5s
     then:
-      - if:
-          condition:
-            lambda: 'return !id(showing_image);'
-          then:
-            - http_request.get:
-                url: "https://clock-server.mikezter.workers.dev/state"
-                capture_response: true
-                on_response:
+      - http_request.get:
+          url: "https://clock-server.mikezter.workers.dev/state"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) return;
+                  int v = atoi(body.c_str());
+                  if (v >= 1 && v <= id(max_img)) {
+                    id(image) = v;
+                    id(showing_image) = true;
+                  } else if (v == 0) {
+                    id(showing_image) = false;
+                    id(image) = 0;
+                  }
+              - if:
+                  condition:
+                    lambda: 'return id(showing_image) && id(image) == 12;'
                   then:
-                    - lambda: |-
-                        if (response->status_code == 200) {
-                          int v = atoi(body.c_str());
-                          if (v >= 1 && v <= id(max_img)) {
-                            id(image) = v;
-                            id(showing_image) = true;
-                          }
-                        }
-
-  - interval: 7s
-    then:
-      - if:
-          condition:
-            lambda: 'return id(showing_image) && id(image) == 12;'
-          then:
-            - script.execute: fetch_custom
+                    - script.execute: fetch_custom
 
   # Sun-synced brightness. Skipped for 1h after the user manually cycles brightness.
   # Elevation curve: ≤-6° → night_brightness, ≥20° → 100%, linear between.
