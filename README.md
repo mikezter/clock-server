@@ -84,13 +84,6 @@ To use the component from your own config without cloning, pull it from GitHub:
 ```yaml
 esphome:
   name: obegraensad-clock
-  platformio_options:
-    lib_deps:
-      - Wire
-      - SPI
-      - adafruit/Adafruit BusIO
-      - adafruit/Adafruit GFX Library
-      - me-no-dev/ESPAsyncTCP
 
 external_components:
   - source: github://mikezter/esphome-ikea-led-matrix@master
@@ -168,8 +161,6 @@ components/
 
 **Rate limiting matters more than you expect.** Without it, someone can send a hundred hearts in five minutes. Enforce limits at the service layer (N messages per sender per hour) and optionally on the device too (ignore messages arriving within X seconds of the last).
 
-**The Adafruit GFX dependency is carrying weight it doesn't earn.** The current driver inherits from `Adafruit_GFX`, pulling in `Wire`, `SPI`, and `Adafruit BusIO`. The Obegränsad doesn't use any of it — the display is a shift register that needs only `digitalWrite`. Removing this dependency is the highest-value refactor available: faster compilation, fewer moving parts, nothing external to break.
-
 **Designing images without an aspect-ratio-aware tool is error-prone.** Standard pixel editors preview at 1:1, so Obegränsad images look wrong until they hit hardware. A browser tool that previews stretched 2× vertically and exports to `uint16_t[16]` would significantly lower the barrier for contributors.
 
 ---
@@ -178,7 +169,6 @@ components/
 
 Pull requests welcome. The most valuable contributions right now:
 
-- **Driver rewrite** — remove Adafruit GFX from `obegraensad_panel`; direct GPIO calls only
 - **MQTT command receiver** — a working ESPHome pattern for receiving image commands from a web service
 - **New bitmaps** — 16×16, designed with 2:1 vertical preview, encoded as `uint16_t[16]` MSB-first
 - **Pixel editor** — browser tool with correct Obegränsad aspect ratio preview, exports to bitmap format

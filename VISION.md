@@ -49,9 +49,8 @@ The panel can be given as a gift. The gifter sets it up, pairs it to their accou
 [ESPHome YAML config]
   |
   ├── external_components: obegraensad_panel (this repo)
-  |     ├── obegraensad-driver.cpp   — shift register protocol
-  |     ├── obegraensad-panel.cpp    — ESPHome DisplayBuffer impl
-  |     └── obegraensad-driver.h     — coordinate mapping (serpentine lookup tables)
+  |     ├── display.py               — config schema + codegen
+  |     └── obegraensad_panel.cpp/.h — DisplayBuffer impl: serpentine LED mapping + shift-register output
   |
   ├── images.h                        — compile-time bitmaps + animations
   ├── display lambda                  — selects image by global int `image`
@@ -60,14 +59,7 @@ The panel can be given as a gift. The gifter sets it up, pairs it to their accou
   └── web_server (port 80)            — local HTTP control
 ```
 
-**Dependencies (PlatformIO lib_deps):**
-- `Wire` — pulled in by Adafruit GFX
-- `SPI` — pulled in by Adafruit GFX
-- `adafruit/Adafruit BusIO` — pulled in by Adafruit GFX
-- `adafruit/Adafruit GFX Library` — base class for the driver ← **unnecessary**
-- `me-no-dev/ESPAsyncTCP` — async TCP for OTA / web server
-
-**The Adafruit GFX problem:** The driver inherits from `Adafruit_GFX` to get `drawPixel`, `drawLine`, etc. But ESPHome's `DisplayBuffer` already provides all drawing primitives through its own abstraction — and the Obegränsad's hardware only needs `digitalWrite` calls to talk to the shift register. The entire Adafruit stack is dead weight. Removing it cuts compile time, eliminates three external dependencies, and makes the code self-explanatory.
+**Dependencies:** none beyond ESPHome core. The component has no `lib_deps`; it drives the pins through ESPHome's own `InternalGPIOPin`, so it builds on both the Arduino and ESP-IDF frameworks.
 
 ---
 
@@ -130,7 +122,7 @@ The 8th slot is intentionally left open. One option: make it pair-specific — t
 
 ### Obegränsad display wiring (serpentine)
 
-The Obegränsad does not wire LEDs in a simple row-major order. The physical LED matrix uses a serpentine pattern: even and odd columns run in opposite directions, and the display is split into top (rows 0–7) and bottom (rows 8–15) halves with different indexing. Two lookup tables (`lookupTop[]`, `lookupBottom[]`) in `obegraensad-driver.cpp` map visual (x, y) coordinates to physical LED indices.
+The Obegränsad does not wire LEDs in a simple row-major order. The physical LED matrix uses a serpentine pattern: even and odd columns run in opposite directions, and the display is split into top (rows 0–7) and bottom (rows 8–15) halves with different indexing. Two lookup tables (`LOOKUP_TOP`, `LOOKUP_BOTTOM`) in `obegraensad_panel.cpp` map visual (x, y) coordinates to physical LED indices.
 
 This is the trickiest part of the driver. Any rewrite must preserve this mapping exactly, or images will render scrambled.
 
@@ -140,26 +132,25 @@ The current config targets an ESP8266 (D1 Mini). The ESP8266 services WiFi in so
 
 ---
 
-## The driver rewrite — design intent
+## The driver — design
 
-The current driver inherits from `Adafruit_GFX`. The target is an ESPHome native component that:
+`obegraensad_panel` (rewritten Nov 2026, replacing the Adafruit GFX based driver) is a single ESPHome native component:
 
-1. Extends `esphome::display::DisplayBuffer` directly (ESPHome's own base class)
-2. Implements only `draw_absolute_pixel_internal(x, y, color)` — one function
-3. Sends frames to the shift register using raw `digitalWrite` / `delayMicroseconds` calls
-4. Has zero external library dependencies beyond ESPHome core
+1. Extends `esphome::display::DisplayBuffer` directly — rotation and clipping come from ESPHome
+2. Keeps the frame as 16 × `uint16_t` (256 bits, 32 bytes), already in shift-out order; `draw_absolute_pixel_internal(x, y, color)` maps (x, y) through the lookup tables and sets one bit
+3. Shifts the frame out via ESPHome `InternalGPIOPin::digital_write` + `delayMicroseconds`
+4. Has zero external library dependencies
 
 The display update cycle:
 ```
 update() called by ESPHome (every 100ms)
-  → do_update_()        — runs the display lambda, fills internal pixel buffer
-  → display()           — copies buffer to driver
-     → clear()          — zero the shift register buffer
-     → drawPixel(x,y)   — set bits in buffer per pixel
-     → scan()           — clock all 256 bits out to shift register, then latch
+  → do_update_()        — clears the frame, runs the display lambda (pixels set bits directly)
+  → write_frame_()      — clock all 256 bits out to shift register, then latch
 ```
 
-The `scan()` function is timing-sensitive: 16 bits per row × 16 rows = 256 serial clock pulses, each ~1µs apart. Total frame time: ~512µs. This should not be interrupted.
+The output is bit-for-bit identical to the old driver (verified on the host by comparing the recorded pin sequences of both for all 256 single pixels and 2000 random frames).
+
+The shift-out is timing-sensitive: 16 bits per row × 16 rows = 256 serial clock pulses, each ~1µs apart. Total frame time: ~512µs. This should not be interrupted.
 
 ---
 
@@ -273,7 +264,7 @@ These should guide every decision:
 ### Phase 0 — Current (done)
 Working ESPHome component, local display, images, animations, HA integration.
 
-### Phase 1 — Clean driver
+### Phase 1 — Clean driver (done, Nov 2026 — pending check on hardware)
 Remove Adafruit GFX dependency. Rewrite `obegraensad_panel` as a pure ESPHome component with direct GPIO calls. Verify all images render correctly. No new features — just a better foundation.
 
 ### Phase 2 — MQTT integration on device

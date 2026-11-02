@@ -5,14 +5,7 @@ esphome:
   name_add_mac_suffix: false
   includes:
     - images.h
-  platformio_options:
-    lib_deps:
-      - Wire                            # Also required by GFX.
-      - SPI                             # Also required by GFX.
-      - adafruit/Adafruit BusIO         # Required by GFX Library.
-      - adafruit/Adafruit GFX Library   # Required for FrekvensPanel.
-      - me-no-dev/ESPAsyncTCP
-      
+
 external_components:
   - source:
       type: local
