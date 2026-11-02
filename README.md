@@ -2,7 +2,7 @@
 
 256 pixels. Three wires. One message.
 
-This project turns the IKEA **Obegränsad** wall panel (and its sibling, the **Frekvens** cube) into a programmable, network-connected LED display using an ESP8266 and ESPHome. Wire up a D1 Mini, flash a config, and you have a living pixel object on your wall — showing the time, cycling through animations, or waiting quietly for a signal from someone who is thinking of you.
+This project turns the IKEA **Obegränsad** wall panel into a programmable, network-connected LED display using an ESP8266 and ESPHome. Wire up a D1 Mini, flash a config, and you have a living pixel object on your wall — showing the time, cycling through animations, or waiting quietly for a signal from someone who is thinking of you.
 
 The hardware costs less than a good dinner. The protocol is three GPIO pins and a shift register. Everything else is yours to design.
 
@@ -41,7 +41,6 @@ No image uploads. No elaborate accounts. A URL shared once, a panel hung once, a
 ## Hardware
 
 **IKEA Obegränsad** — 16×16 LED matrix wall panel  
-**IKEA Frekvens** — 16×16 LED matrix cube (also supported)  
 **Wemos D1 Mini** (ESP8266) or any ESP32 board  
 Three dupont wires and an hour
 
@@ -64,64 +63,27 @@ The display communicates via a serial shift register: bits are clocked in one at
 **Requirements:** ESPHome ≥ 2025.11.0, a D1 Mini, WiFi credentials.
 
 ```bash
-git clone https://github.com/sascha-hemi/esphome-ikea-led-matrix
-cd esphome-ikea-led-matrix/esphome_devices
+git clone https://github.com/mikezter/esphome-ikea-led-matrix
+cd esphome-ikea-led-matrix
 
 # Fill in your WiFi credentials
 cp secrets.yaml.example secrets.yaml
 
 # Flash
-esphome run esphome-web-e75bc4.yaml
+esphome run obegraensad-clock.yaml
 ```
+
+The repo root is the ESPHome config directory. `obegraensad-clock.yaml` loads the driver from the local `components/` folder, so changes to the driver are picked up on the next build without pushing. To run the ESPHome Device Builder against it: `esphome-device-builder .`
 
 After flashing, cycle through images with the physical button on GPIO13, from the Home Assistant UI, or directly via the built-in web server at `http://<device-ip>`. OTA updates work out of the box.
 
-### Minimal config — Frekvens clock
-
-```yaml
-esphome:
-  name: frekvens-clock
-  platform: ESP8266
-  board: d1_mini
-  platformio_options:
-    lib_deps:
-      - Wire
-      - SPI
-      - adafruit/Adafruit BusIO
-      - adafruit/Adafruit GFX Library
-      - me-no-dev/ESPAsyncTCP
-
-external_components:
-  - source: github://sascha-hemi/esphome-ikea-led-matrix@master
-    components: [ frekvens_panel ]
-
-time:
-  - platform: sntp
-    id: ntp_time
-    timezone: 'Europe/Berlin'
-
-font:
-  - file: "04B03.ttf"
-    id: b03
-    size: 8
-
-display:
-  - platform: frekvens_panel
-    latch_pin: 12
-    clock_pin: 04
-    data_pin: 05
-    lambda: |-
-      it.strftime(4, 0, id(b03), "%H", id(ntp_time).now());
-      it.strftime(4, 8, id(b03), "%M", id(ntp_time).now());
-```
-
 ### Minimal config — Obegränsad clock
+
+To use the component from your own config without cloning, pull it from GitHub:
 
 ```yaml
 esphome:
   name: obegraensad-clock
-  platform: ESP8266
-  board: d1_mini
   platformio_options:
     lib_deps:
       - Wire
@@ -131,8 +93,11 @@ esphome:
       - me-no-dev/ESPAsyncTCP
 
 external_components:
-  - source: github://sascha-hemi/esphome-ikea-led-matrix@master
+  - source: github://mikezter/esphome-ikea-led-matrix@master
     components: [ obegraensad_panel ]
+
+esp8266:
+  board: d1_mini
 
 time:
   - platform: sntp
@@ -159,7 +124,7 @@ display:
 
 ## Adding your own images
 
-Every image lives in [esphome_devices/images.h](esphome_devices/images.h) as 16 rows of `uint16_t`. Bit 15 (MSB) is the leftmost pixel; `1` = on, `0` = off.
+Every image lives in [images.h](images.h) as 16 rows of `uint16_t`. Bit 15 (MSB) is the leftmost pixel; `1` = on, `0` = off.
 
 ```cpp
 const Image16x16 IMG_HEART = {
@@ -179,14 +144,12 @@ Draw at 16×16, preview stretched 2× vertically, encode as `uint16_t[16]`, add 
 ## Project structure
 
 ```
+obegraensad-clock.yaml   — working device configuration
+images.h                 — all bitmaps and animations (self-contained)
+04B03.ttf                — pixel font for the clock
+secrets.yaml.example     — template for secrets.yaml (gitignored)
 components/
-  frekvens_panel/         — ESPHome component for the Frekvens cube
-  obegraensad_panel/      — ESPHome component for the Obegränsad panel
-
-esphome_devices/
-  esphome-web-e75bc4.yaml — working device configuration
-  images.h                — all bitmaps and animations (self-contained)
-  04B03.ttf               — pixel font for the clock
+  obegraensad_panel/     — ESPHome display component for the Obegränsad panel
 ```
 
 ---
@@ -222,4 +185,4 @@ Pull requests welcome. The most valuable contributions right now:
 
 ---
 
-*Hardware: IKEA Obegränsad / Frekvens · Firmware: ESPHome on ESP8266/ESP32 · Protocol: shift register, three wires*
+*Hardware: IKEA Obegränsad · Firmware: ESPHome on ESP8266/ESP32 · Protocol: shift register, three wires*

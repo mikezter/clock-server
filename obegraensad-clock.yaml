@@ -14,7 +14,9 @@ esphome:
       - me-no-dev/ESPAsyncTCP
       
 external_components:
-  - source:  github://mikezter/esphome-ikea-led-matrix@master
+  - source:
+      type: local
+      path: components
     components: [ obegraensad_panel ]
 
 esp8266:
