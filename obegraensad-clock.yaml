@@ -77,7 +77,7 @@ script:
   - id: return_to_clock
     then:
       - http_request.post:
-          url: "https://clock-server.mikezter.workers.dev/reset"
+          url: "http://clock-server.mikezter.workers.dev/reset"
       - lambda: |-
           id(showing_image) = false;
           id(image) = 0;
@@ -131,7 +131,7 @@ script:
     mode: single
     then:
       - http_request.get:
-          url: "https://clock-server.mikezter.workers.dev/custom"
+          url: "http://clock-server.mikezter.workers.dev/custom"
           capture_response: true
           on_response:
             then:
@@ -214,9 +214,11 @@ font:
     id: b03
     size: 8
 
-# Outbound HTTP client. verify_ssl:false avoids the ESP8266 TLS cert-pinning
-# headache against rotating *.workers.dev certs. It's a single periodic GET
-# on an otherwise-idle device, so the heap cost is acceptable.
+# Outbound HTTP client. Plain http:// on purpose: a BearSSL handshake takes
+# 1-2 s on the ESP8266 without yielding, and polling over https every 5 s
+# (twice while the drawing shows) tripped the Soft WDT in br_ssl_hs_client_run.
+# workers.dev answers plain HTTP without a redirect. Should an https URL come
+# back, verify_ssl:false skips cert pinning against rotating *.workers.dev certs.
 http_request:
   verify_ssl: false
   timeout: 5s
@@ -230,7 +232,7 @@ interval:
   - interval: 5s
     then:
       - http_request.get:
-          url: "https://clock-server.mikezter.workers.dev/state"
+          url: "http://clock-server.mikezter.workers.dev/state"
           capture_response: true
           on_response:
             then:
