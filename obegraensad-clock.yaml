@@ -96,6 +96,15 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  # Revision of the free drawing (/state sends "12 <rev>"); refetch image 12 only when it changes.
+  - id: wanted_rev
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: loaded_rev
+    type: int
+    restore_value: no
+    initial_value: '-1'
   - id: need_fetch
     type: bool
     restore_value: no
@@ -184,7 +193,8 @@ script:
             then:
               - lambda: |-
                   if (response->status_code != 200) return;   // keep whatever is on screen
-                  int v = atoi(body.c_str());
+                  int v = 0, rev = 0;
+                  sscanf(body.c_str(), "%d %d", &v, &rev);   // "12 7" = drawing, revision 7
                   if (v == 0) {
                     id(showing_image) = false;
                     id(image) = 0;
@@ -196,9 +206,10 @@ script:
                     id(showing_image) = true;
                     id(need_fetch) = false;
                   } else if (v >= 1 && v <= id(max_img) && v != 11) {
-                    // bitmap: image 12 (drawing) can change under the same id, so refetch it every poll
+                    // bitmap: library images never change; the drawing (12) changes with its revision
                     id(wanted_id) = v;
-                    id(need_fetch) = (v != id(loaded_id)) || (v == 12);
+                    id(wanted_rev) = rev;
+                    id(need_fetch) = (v != id(loaded_id)) || (v == 12 && rev != id(loaded_rev));
                     if (!id(need_fetch)) {
                       id(image) = v;
                       id(showing_image) = true;
@@ -227,6 +238,7 @@ script:
                         if (row != 16) return;                       // incomplete: keep the old image
                         for (int i = 0; i < 16; i++) id(current_rows)[i] = rows[i];
                         id(loaded_id) = id(wanted_id);
+                        id(loaded_rev) = id(wanted_rev);
                         id(image) = id(wanted_id);
                         id(showing_image) = true;
                         id(need_fetch) = false;
