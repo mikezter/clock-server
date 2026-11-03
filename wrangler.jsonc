@@ -14,11 +14,15 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"kv_namespaces": [
-		{
-			"binding": "CLOCK",
-			"id": "8e8eb8dbe0504f03a12626e460cdfcda"
-		}
+	// Panel state. SQLite backend: the only Durable Object backend on Workers Free.
+	// (The old KV namespace CLOCK, id 8e8eb8dbe0504f03a12626e460cdfcda, is no longer bound.)
+	"durable_objects": {
+		"bindings": [
+			{ "name": "PANEL", "class_name": "Panel" }
+		]
+	},
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["Panel"] }
 	]
 	/**
 	 * Smart Placement

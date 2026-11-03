@@ -11,9 +11,14 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
   - `GET /draw`    → 16×16 pixel editor webpage (the `DRAW_PAGE` constant)
   - `POST /set`    → sets displayed image; body `{img:<int>, ttl:<seconds>}`
   - `GET /state`   → device polls this every 5s; returns a plain-text integer
-- **KV namespace** bound as `CLOCK`, single key `"state"` holding
-  `{img, expiresAt}`. Auto-revert is server-side: when ttl elapses,
-  `/state` returns 0 (clock mode). Device stays dumb/stateless.
+- **Durable Object** `Panel` (binding `PANEL`, one instance `getByName("default")`,
+  SQLite backend: the only DO backend on Workers Free). Stores `state`
+  `{img, expiresAt}` and `custom_img` (16 rows) via `ctx.storage.kv`.
+  Strongly consistent, unlike the KV namespace used before (old namespace
+  `8e8eb8dbe0504f03a12626e460cdfcda` still exists, unbound). Auto-revert is
+  server-side: when ttl elapses, `/state` returns 0 (clock mode).
+- Free plan budget: 100k DO requests/day, 13k GB-s/day. Plain request handling
+  without timers is hibernation-eligible, so duration is only the ms per request.
 - Optional `TOKEN` secret gates `/set` via an `X-Token` header (currently unused).
 
 ## Device side (ESPHome, separate repo)
@@ -39,7 +44,7 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
   to `(1 << c)` in render().
 
 ## Deploy
-`npx wrangler deploy`  (KV id lives in wrangler.jsonc)
+`npx wrangler deploy`. Tests: `npx vitest run` (routes, expiry, custom drawing).
 
 ## Next planned feature (not built yet)
 Send custom drawings to the clock at runtime: POST the 16 row-words to the
