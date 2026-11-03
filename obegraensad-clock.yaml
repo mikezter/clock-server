@@ -1,3 +1,9 @@
+# Main device: clock + images pushed from the Cloudflare Worker.
+# Derived from obegraensad-simple.yaml (same dimming stack and pins); on top
+# of that it polls the Worker and shows the image it asks for. Static bitmaps
+# come from the Worker (GET /img/<id>), only the frame-based animations
+# (matrix/tetris/snake) live in the firmware (images.h).
+
 esphome:
   name: obegraensad-clock
   friendly_name: IKEA OBEGRÄNSAD
@@ -15,16 +21,13 @@ external_components:
 esp8266:
   board: d1_mini
 
-# Enable logging
 logger:
 
-# Enable Home Assistant API
 api:
   reboot_timeout: 0s
 
-# Allow Over-The-Air updates
 ota:
-- platform: esphome
+  - platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
@@ -41,33 +44,119 @@ web_server:
   port: 80
   version: 3
 
+# Brightness calibration: PWM level 16/255 is still dark, 17/255 is the
+# lowest visible level. min_power maps level 0+ to 17/255, zero_means_zero
+# keeps 0 really off. The slider shows "PWM level - 16":
+#   0 = off, 1 = 17/255 (dimmest), ..., 239 = 255/255 (full).
+# No light entity (and so no gamma curve) in between, so slider value and
+# PWM level match 1:1. The on/off switch is derived from the slider
+# (on = slider > 0), so the two can never disagree.
+output:
+  - platform: esp8266_pwm
+    id: matrix_brightness
+    pin:
+      number: GPIO14
+      inverted: true
+    # 300 Hz flickers least: fewer PWM edges = fewer wrong pixels.
+    # 1 kHz (default) and 5 kHz were both worse. Do not change.
+    frequency: 300Hz
+    min_power: 0.0667   # 17/255
+    zero_means_zero: true
+
 globals:
-  - id: 'image'
+  - id: last_on_level
+    type: int
+    restore_value: no
+    initial_value: '239'   # slider value the switch turns back on to
+  # What the panel shows. 0 = clock, 1..7 and 12 = bitmap from the Worker,
+  # 8..10 = animation in the firmware (11 = all white, disabled: WiFi dropped).
+  - id: image
     type: int
     restore_value: no
     initial_value: '0'
-  - id: max_img
-    type: int
-    restore_value: no
-    initial_value: '12'       # 0=clock 1=test 2=smiley 3=heart 4=cloud
-                             # 5=sun 6=lightning 7=battery 8=matrix 9=tetris
-  - id: custom_rows
-    type: uint16_t[16]
-    restore_value: no
-    initial_value: '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
   - id: showing_image
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: brightness_step
+  - id: max_img
     type: int
     restore_value: no
-    initial_value: '4'        # 0=0%  1=20%  2=40%  3=60%  4=100%
-  - id: manual_override_until
-    type: uint32_t
+    initial_value: '12'
+  # Bitmap currently shown (16 rows, MSB = leftmost pixel), and which image id it is.
+  - id: current_rows
+    type: uint16_t[16]
     restore_value: no
-    initial_value: '0'        # millis() timestamp; 0 = no override
+    initial_value: '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
+  - id: loaded_id
+    type: int
+    restore_value: no
+    initial_value: '0'
+  # Set by the /state poll: bitmap `wanted_id` still has to be fetched.
+  - id: wanted_id
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: need_fetch
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+number:
+  - platform: template
+    id: brightness
+    name: "Helligkeit"
+    mode: slider
+    min_value: 0
+    max_value: 239
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 239
+    on_value:
+      - lambda: |-
+          int n = (int) x;
+          if (n > 0) id(last_on_level) = n;
+          // 1..239 -> 0..1, scaled by min_power to 17/255..255/255
+          id(matrix_brightness).set_level(n > 0 ? (n - 1) / 238.0f : 0.0f);
+
+switch:
+  - platform: template
+    name: "Anzeige"
+    lambda: 'return id(brightness).state > 0;'
+    turn_on_action:
+      - number.set:
+          id: brightness
+          value: !lambda 'return id(last_on_level);'
+    turn_off_action:
+      - number.set:
+          id: brightness
+          value: 0
+
+# Outbound HTTP client. Plain http:// on purpose: a BearSSL handshake takes
+# 1-2 s on the ESP8266 without yielding, and polling over https every 5 s
+# tripped the Soft WDT in br_ssl_hs_client_run. workers.dev answers plain HTTP
+# without a redirect. Should an https URL come back, verify_ssl:false skips
+# cert pinning against rotating *.workers.dev certs.
+http_request:
+  verify_ssl: false
+  timeout: 5s
+  useragent: obegraensad-clock
+
 script:
+  # Button stages (slider values): 0 (off) -> 1 -> 5 -> 20 -> 60 -> 239 -> 0 ...
+  # Steps to the next stage above the current slider value, so it also
+  # continues sensibly after the slider was moved by hand.
+  - id: next_stage
+    then:
+      - number.set:
+          id: brightness
+          value: !lambda |-
+            static const int stages[] = {1, 5, 20, 60, 239};
+            int cur = (int) id(brightness).state;
+            for (int s : stages)
+              if (s > cur) return s;
+            return 0;
+
   # POST first, then reset locally: otherwise a poll in between can still
   # see the old image on the Worker and lock it again.
   - id: return_to_clock
@@ -77,75 +166,76 @@ script:
       - lambda: |-
           id(showing_image) = false;
           id(image) = 0;
+          id(wanted_id) = 0;
+          id(need_fetch) = false;
 
-  - id: cycle_brightness
-    then:
-      - lambda: |-
-          id(brightness_step) = (id(brightness_step) + 1) % 5;
-          id(manual_override_until) = millis() + 3600000UL;
-      - if:
-          condition:
-            lambda: 'return id(brightness_step) == 0;'
-          then:
-            - light.turn_off:
-                id: display_light
-                transition_length: 0ms
-      - if:
-          condition:
-            lambda: 'return id(brightness_step) == 1;'
-          then:
-            - light.turn_on:
-                id: display_light
-                brightness: 20%
-                transition_length: 0ms
-      - if:
-          condition:
-            lambda: 'return id(brightness_step) == 2;'
-          then:
-            - light.turn_on:
-                id: display_light
-                brightness: 40%
-                transition_length: 0ms
-      - if:
-          condition:
-            lambda: 'return id(brightness_step) == 3;'
-          then:
-            - light.turn_on:
-                id: display_light
-                brightness: 60%
-                transition_length: 0ms
-      - if:
-          condition:
-            lambda: 'return id(brightness_step) == 4;'
-          then:
-            - light.turn_on:
-                id: display_light
-                brightness: 100%
-                transition_length: 0ms
-
-  - id: fetch_custom
+  # One sync every 5 s, strictly sequential (two sessions at once don't fit
+  # in the heap, and a request must never be started inside another request's
+  # on_response): 1. ask /state what to show, 2. if that is a bitmap we don't
+  # have yet, fetch it from /img/<id>. mode: single skips a tick if the
+  # previous one is still running.
+  - id: sync_panel
     mode: single
     then:
       - http_request.get:
-          url: "http://clock-server.mikezter.workers.dev/custom"
+          url: "http://clock-server.mikezter.workers.dev/state"
           capture_response: true
           on_response:
             then:
               - lambda: |-
-                  if (response->status_code == 200) {
-                    int row = 0;
-                    size_t pos = 0;
-                    while (row < 16 && pos <= body.size()) {
-                      size_t end = body.find('\n', pos);
-                      if (end == std::string::npos) {
-                        if (pos < body.size()) id(custom_rows)[row++] = (uint16_t)atoi(body.c_str() + pos);
-                        break;
-                      }
-                      id(custom_rows)[row++] = (uint16_t)atoi(body.c_str() + pos);
-                      pos = end + 1;
+                  if (response->status_code != 200) return;   // keep whatever is on screen
+                  int v = atoi(body.c_str());
+                  if (v == 0) {
+                    id(showing_image) = false;
+                    id(image) = 0;
+                    id(need_fetch) = false;
+                  } else if (v >= 8 && v <= 10 && v <= id(max_img)) {
+                    // firmware animation: nothing to fetch
+                    id(wanted_id) = v;
+                    id(image) = v;
+                    id(showing_image) = true;
+                    id(need_fetch) = false;
+                  } else if (v >= 1 && v <= id(max_img) && v != 11) {
+                    // bitmap: image 12 (drawing) can change under the same id, so refetch it every poll
+                    id(wanted_id) = v;
+                    id(need_fetch) = (v != id(loaded_id)) || (v == 12);
+                    if (!id(need_fetch)) {
+                      id(image) = v;
+                      id(showing_image) = true;
                     }
                   }
-          
+      - if:
+          condition:
+            lambda: 'return id(need_fetch);'
+          then:
+            - http_request.get:
+                url: !lambda 'return "http://clock-server.mikezter.workers.dev/img/" + std::to_string(id(wanted_id));'
+                capture_response: true
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200) return;   // retry on the next poll
+                        uint16_t rows[16];
+                        int row = 0;
+                        size_t pos = 0;
+                        while (row < 16 && pos < body.size()) {
+                          rows[row++] = (uint16_t) atoi(body.c_str() + pos);
+                          size_t end = body.find('\n', pos);
+                          if (end == std::string::npos) break;
+                          pos = end + 1;
+                        }
+                        if (row != 16) return;                       // incomplete: keep the old image
+                        for (int i = 0; i < 16; i++) id(current_rows)[i] = rows[i];
+                        id(loaded_id) = id(wanted_id);
+                        id(image) = id(wanted_id);
+                        id(showing_image) = true;
+                        id(need_fetch) = false;
+
+interval:
+  - interval: 5s
+    then:
+      - script.execute: sync_panel
+
 sensor:
   - platform: template
     name: "Free Heap"
@@ -155,12 +245,17 @@ sensor:
 
 button:
   - platform: template
+    name: "Dimmstufe weiter"
+    on_press:
+      - script.execute: next_stage
+  - platform: template
     name: "Back to Clock"
     on_press:
       - script.execute: return_to_clock
 
 binary_sensor:
   - platform: gpio
+    id: panel_button
     pin:
       number: GPIO13
       mode:
@@ -178,29 +273,7 @@ binary_sensor:
             then:
               - script.execute: return_to_clock
             else:
-              - script.execute: cycle_brightness
-
-light:
-  - platform: monochromatic
-    name: 'Brightness'
-    id: display_light
-    output: matrix_brightness
-    restore_mode: ALWAYS_ON
-
-output:
-  - platform: esp8266_pwm
-    # Enables brightness control.
-    id: matrix_brightness
-    min_power: 0.0667   # 17/255 — lowest PWM level that visibly lights the LEDs
-    frequency: 300Hz    # fewer PWM edges = fewer wrong pixels (5 kHz was worse than the 1 kHz default)
-    pin:
-      number: GPIO14
-      inverted: True
-
-sun:
-  id: sun_component
-  latitude: 52.52°N   # Berlin
-  longitude: 13.41°E
+              - script.execute: next_stage
 
 time:
   - platform: sntp
@@ -212,68 +285,6 @@ font:
     id: b03
     size: 8
 
-# Outbound HTTP client. Plain http:// on purpose: a BearSSL handshake takes
-# 1-2 s on the ESP8266 without yielding, and polling over https every 5 s
-# (twice while the drawing shows) tripped the Soft WDT in br_ssl_hs_client_run.
-# workers.dev answers plain HTTP without a redirect. Should an https URL come
-# back, verify_ssl:false skips cert pinning against rotating *.workers.dev certs.
-http_request:
-  verify_ssl: false
-  timeout: 5s
-  useragent: obegraensad-clock
-
-# Poll the Worker every 5s and follow its state: 1..max_img shows that image,
-# 0 returns to the clock (the Worker's TTL expired or someone hit /reset).
-# Errors / non-200 keep whatever is on screen. The custom drawing is fetched
-# right after, in sequence, so two TLS sessions never overlap on the ESP8266.
-interval:
-  - interval: 5s
-    then:
-      - http_request.get:
-          url: "http://clock-server.mikezter.workers.dev/state"
-          capture_response: true
-          on_response:
-            then:
-              - lambda: |-
-                  if (response->status_code != 200) return;
-                  int v = atoi(body.c_str());
-                  if (v >= 1 && v <= id(max_img)) {
-                    id(image) = v;
-                    id(showing_image) = true;
-                  } else if (v == 0) {
-                    id(showing_image) = false;
-                    id(image) = 0;
-                  }
-              - if:
-                  condition:
-                    lambda: 'return id(showing_image) && id(image) == 12;'
-                  then:
-                    - script.execute: fetch_custom
-
-  # Sun-synced brightness. Skipped for 1h after the user manually cycles brightness.
-  # Elevation curve: ≤-6° → night_brightness, ≥20° → 100%, linear between.
-  - interval: 60s
-    then:
-      - if:
-          condition:
-            lambda: 'return id(manual_override_until) == 0 || millis() >= id(manual_override_until);'
-          then:
-            - lambda: |-
-                float elev = id(sun_component).elevation();
-                float bri;
-                if (elev <= -6.0f) {
-                  bri = 0.0f;           // min_power (17/255) is the floor when on
-                } else if (elev >= 20.0f) {
-                  bri = 1.0f;
-                } else {
-                  bri = (elev + 6.0f) / 26.0f;
-                }
-                auto call = id(display_light).make_call();
-                call.set_state(true);   // re-enables if manually turned off after override expires
-                call.set_brightness(bri);
-                call.set_transition_length(60000);
-                call.perform();
-
 display:
   - platform: obegraensad_panel
     rotation: 90
@@ -281,8 +292,6 @@ display:
     clock_pin: 04
     data_pin: 05
     update_interval: 100ms
-
-
     lambda: |-
       static int frame = 0;
       frame++;
@@ -298,26 +307,18 @@ display:
         }
       } else {
         switch (id(image)) {
-          case 1: draw_image(it, IMG_TEST);      break;
-          case 2: draw_image(it, IMG_SMILEY);    break;
-          case 3: draw_image(it, IMG_HEART);     break;
-          case 4: draw_image(it, IMG_CLOUD);     break;
-          case 5: draw_image(it, IMG_SUN);       break;
-          case 6: draw_image(it, IMG_LIGHTNING); break;
-          case 7: draw_image(it, IMG_BATTERY);   break;
-          case 8: draw_matrix(it, frame);        break;
-          case 9: draw_tetris(it, frame);        break;
-          case 10: draw_snake(it, frame);        break;
-          // case 11: draw_image(it, IMG_WHITE);   break; // no wifi
-          case 12: {
+          case 8:  draw_matrix(it, frame); break;
+          case 9:  draw_tetris(it, frame); break;
+          case 10: draw_snake(it, frame);  break;
+          default:
+            // bitmap from the Worker (1..7, 12)
             for (int row = 0; row < 16; row++) {
-              uint16_t word = id(custom_rows)[row];
+              uint16_t word = id(current_rows)[row];
               for (int col = 0; col < 16; col++) {
                 bool on = word & (1 << (15 - col));
                 it.draw_pixel_at(col, row, on ? Color::WHITE : Color::BLACK);
               }
             }
             break;
-          }
         }
       }

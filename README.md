@@ -34,7 +34,7 @@ That's the web service this project is building toward: one sender, one panel, e
 [ you, anywhere ]  →  [ web service ]  →  [ MQTT broker ]  →  [ their panel ]
 ```
 
-**Today** the panel polls a Cloudflare Worker instead (`clock-server.mikezter.workers.dev`): `GET /state` every 5 s returns an image index (0 = clock), `GET /custom` returns 16 rows for the free-drawn image 12, and `POST /reset` clears the state when the image is dismissed on the panel. Polling keeps the panel behind NAT without a broker; MQTT stays the target for push and many panels.
+**Today** the panel polls a Cloudflare Worker instead (`clock-server.mikezter.workers.dev`): `GET /state` every 5 s returns an image index (0 = clock), `GET /img/<id>` returns the 16 rows of that image (the bitmaps live in the Worker, not in the firmware; image 12 is the free drawing), and `POST /reset` clears the state when the image is dismissed on the panel. Polling keeps the panel behind NAT without a broker; MQTT stays the target for push and many panels.
 
 No image uploads. No elaborate accounts. A URL shared once, a panel hung once, a vocabulary of eight glowing things.
 
@@ -77,7 +77,7 @@ esphome run obegraensad-clock.yaml
 
 The repo root is the ESPHome config directory. `obegraensad-clock.yaml` loads the driver from the local `components/` folder, so changes to the driver are picked up on the next build without pushing. To run the ESPHome Device Builder against it: `esphome-device-builder .`
 
-After flashing, the panel shows the clock and switches to whatever image the Worker reports. The physical button on GPIO13 dismisses a shown image (back to the clock) or, on the clock, cycles brightness 0 / 20 / 40 / 60 / 100 %. Outside a manual override (1 h after a button press) brightness follows the sun's elevation. Home Assistant and the built-in web server at `http://<device-ip>` expose the brightness light, a "Back to Clock" button and a free-heap sensor. OTA updates work out of the box.
+After flashing, the panel shows the clock and switches to whatever image the Worker reports. The physical button on GPIO13 dismisses a shown image (back to the clock) or, on the clock, steps through the brightness stages (off → 1 → 5 → 20 → 60 → 239 on a 0–239 scale, 0 = really off). Home Assistant and the built-in web server at `http://<device-ip>` expose the brightness slider, an on/off switch, a "Dimmstufe weiter" and a "Back to Clock" button and a free-heap sensor. OTA updates work out of the box.
 
 ### Minimal config — Obegränsad clock
 
@@ -119,7 +119,7 @@ display:
 
 ## Adding your own images
 
-Every image lives in [images.h](images.h) as 16 rows of `uint16_t`. Bit 15 (MSB) is the leftmost pixel; `1` = on, `0` = off.
+Every image is 16 rows of `uint16_t`, stored in the Worker (`clock-server/src/IMAGES.js`) and fetched by the panel on demand (the old C arrays are in this repo's git history, `images.h` keeps only the animations). Bit 15 (MSB) is the leftmost pixel; `1` = on, `0` = off.
 
 ```cpp
 const Image16x16 IMG_HEART = {
@@ -140,7 +140,7 @@ Draw at 16×16, preview stretched 2× vertically, encode as `uint16_t[16]`, add 
 
 ```
 obegraensad-clock.yaml   — working device configuration
-images.h                 — all bitmaps and animations (self-contained)
+images.h                 — the frame-based animations (bitmaps come from the Worker)
 04B03.ttf                — pixel font for the clock
 secrets.yaml.example     — template for secrets.yaml (gitignored)
 components/

@@ -6,7 +6,7 @@ ESPHome firmware for an IKEA Obegränsad 16×16 LED panel on a Wemos D1 Mini (ES
 
 - `obegraensad-clock.yaml`: the main device config (node `obegraensad-clock`, IP 192.168.1.100)
 - `obegraensad-simple.yaml`: minimal second device (node `obegraensad-simple`), clock only, no Worker/images; same pins and PWM settings
-- `images.h`: bitmaps + animations (`draw_image`, `draw_matrix`, `draw_tetris`, `draw_snake`), pulled in via `esphome: includes:`
+- `images.h`: only the frame-based animations now (`draw_matrix`, `draw_tetris`, `draw_snake`), pulled in via `esphome: includes:`. The static bitmaps moved to the Worker (`GET /img/<id>`); the old C arrays are in git history
 - `components/obegraensad_panel/`: the display driver (`display.py`, `obegraensad_panel.{h,cpp}`)
 - `secrets.yaml` (gitignored; template in `secrets.yaml.example`), `.esphome/` (build cache), `.device-builder*` (Device Builder state, gitignored)
 - `.env/`: Python venv with `esphome` and `esphome-device-builder`
@@ -40,7 +40,9 @@ The Device Builder runs as the user systemd unit `esphome.service` (`systemctl -
 
 ## Remote image source
 
-Cloudflare Worker `https://clock-server.mikezter.workers.dev`: `GET /state` → image index (polled every 5 s; 0 = clock, 1..`max_img` = image), `GET /custom` → 16 newline-separated `uint16_t` rows for image 12 (MSB = leftmost pixel), `POST /reset` → clear when dismissed on the panel. The Worker code is not in this repo (`~/obegransand/clock-server`); its state lives in a SQLite Durable Object `Panel` (strongly consistent, works on Workers Free), not KV.
+Cloudflare Worker `https://clock-server.mikezter.workers.dev`: `GET /state` → image index (polled every 5 s; 0 = clock, 1..`max_img` = image), `GET /img/<id>` → 16 newline-separated `uint16_t` rows (MSB = leftmost pixel) for ids 1..7 (library bitmaps from `src/IMAGES.js`) and 12 (free drawing; same data as `GET /custom`), 404 otherwise; ids 8..10 are firmware animations and need no fetch, 11 (all white) is disabled. `POST /reset` → clear when dismissed on the panel. The Worker code lives in `~/obegransand/clock-server` (own repo, `npx wrangler deploy`); its state lives in a SQLite Durable Object `Panel` (strongly consistent, works on Workers Free), not KV.
+
+The device does one `sync_panel` script every 5 s: `/state` first, then, only if that names a bitmap it does not have yet (or image 12, which can change), `/img/<id>` — in the same script, never inside `on_response`. Until the bitmap arrives, the previous image/clock stays on screen. Only the currently shown bitmap is held in RAM (`current_rows`); a cache of the last ~5 is a planned next step.
 
 ## Git
 

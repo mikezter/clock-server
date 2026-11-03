@@ -14,11 +14,11 @@ There are two device configs that share the same driver and wiring:
 
 - **`obegraensad-clock.yaml`** — the full device. The display shows:
   - A live clock (NTP-sourced, pixel font)
-  - 7 hand-crafted 16×16 bitmaps (test pattern, smiley, heart, cloud, sun, lightning bolt, battery); an all-white image exists in `images.h` but is disabled (WiFi dropped while it was shown, probably from LED current draw — unverified)
+  - 7 hand-crafted 16×16 bitmaps (test pattern, smiley, heart, cloud, sun, lightning bolt, battery), served by the Worker at `GET /img/<id>` and no longer compiled into the firmware. An all-white image (id 11) is disabled (WiFi dropped while it was shown, probably from LED current draw — unverified)
   - 3 frame-based animations (matrix rain, Tetris, border snake)
-  - A custom 16×16 drawing fetched from the Worker (image 12)
+  - A custom 16×16 drawing from the Worker (image 12, same `/img/<id>` path)
 
-  Which image shows is decided remotely: the device polls a Cloudflare Worker (`GET /state` every 5 s; 0 = clock). The physical button (GPIO13) returns to the clock while an image shows (and tells the Worker via `POST /reset`), otherwise it cycles brightness in five steps. Brightness is PWM on GPIO14 through the ESPHome monochromatic light component, with a sun-elevation-based automatic dimming that a manual button press overrides for an hour.
+  Which image shows is decided remotely: the device polls a Cloudflare Worker (`GET /state` every 5 s; 0 = clock). The physical button (GPIO13) returns to the clock while an image shows (and tells the Worker via `POST /reset`), otherwise it cycles brightness in five steps. Brightness works as in the simple device: the slider/switch/button stack below (PWM on GPIO14, 300 Hz, calibrated 0..239 slider, stages 0 → 1 → 5 → 20 → 60 → 239). The earlier light entity with gamma and the sun-elevation auto-dimming were dropped when this config was re-derived from the simple one (Nov 2026).
 - **`obegraensad-simple.yaml`** — a minimal clock-only device. See "The simple device" below.
 
 This is a functional, working tinkerer's project. The vision is to make it something more.
@@ -56,13 +56,12 @@ components/obegraensad_panel/          — shared driver, loaded by both configs
                                          shift-out via ISRInternalGPIOPin
 
 obegraensad-clock.yaml  (full device)
-  ├── images.h (esphome: includes)     — compile-time bitmaps + animations
-  ├── display lambda                   — clock, or image selected by global int `image`
-  ├── interval 5s → http_request       — GET /state (and /custom for image 12) from the Worker
-  ├── binary_sensor (GPIO13)           — back to clock (POST /reset) or cycle brightness
+  ├── images.h (esphome: includes)     — the three frame-based animations only
+  ├── display lambda                   — clock, animation (ids 8-10), or the bitmap in `current_rows`
+  ├── interval 5s → script sync_panel  — GET /state, then GET /img/<id> if a new bitmap is wanted
+  ├── binary_sensor (GPIO13)           — back to clock (POST /reset) or step brightness
   ├── button "Back to Clock"           — same as the button while an image shows
-  ├── light/output (GPIO14)            — monochromatic light on esp8266_pwm, 300 Hz, min_power 17/255
-  ├── sun + interval 60s               — sun-elevation-based dimming
+  ├── output (GPIO14) + number/switch  — esp8266_pwm, 300 Hz, calibrated slider (as in the simple device)
   └── web_server v3 (port 80), api     — local control
 
 obegraensad-simple.yaml  (clock only)
@@ -144,7 +143,7 @@ Each image is a deliberate choice. The vocabulary should be small enough to be m
 
 The 8th slot is intentionally left open. One option: make it pair-specific — the gifter and recipient agree on what it means when they set up the panel.
 
-**Image format:** `uint16_t[16]`, 16 rows, MSB = leftmost pixel. Stored in `images.h` as compile-time constants. Each image is designed squat (horizontally compressed) to render correctly on the Obegränsad's ~2:1 vertical-to-horizontal pixel spacing.
+**Image format:** `uint16_t[16]`, 16 rows, MSB = leftmost pixel. Stored in the Worker (`src/IMAGES.js`, served at `GET /img/<id>`); the firmware only keeps the bitmap it currently shows. Each image is designed squat (horizontally compressed) to render correctly on the Obegränsad's ~2:1 vertical-to-horizontal pixel spacing.
 
 ---
 
