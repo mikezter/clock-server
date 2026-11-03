@@ -39,7 +39,7 @@ The Device Builder runs as the user systemd unit `esphome.service` (`systemctl -
 
 ## Remote image source
 
-Cloudflare Worker `https://clock-server.mikezter.workers.dev`: `GET /state` → image index (polled every 5 s; 0 = clock, 1..`max_img` = image), `GET /custom` → 16 newline-separated `uint16_t` rows for image 12 (MSB = leftmost pixel), `POST /reset` → clear when dismissed on the panel. The Worker code is not in this repo.
+Cloudflare Worker `https://clock-server.mikezter.workers.dev`: `GET /state` → image index (polled every 5 s; 0 = clock, 1..`max_img` = image), `GET /custom` → 16 newline-separated `uint16_t` rows for image 12 (MSB = leftmost pixel), `POST /reset` → clear when dismissed on the panel. The Worker code is not in this repo (`~/obegransand/clock-server`); its state lives in a SQLite Durable Object `Panel` (strongly consistent, works on Workers Free), not KV.
 
 ## Git
 
