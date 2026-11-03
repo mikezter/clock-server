@@ -45,6 +45,23 @@ describe("clock-server", () => {
 		expect(await text("/state")).toBe("12");
 	});
 
+	it("GET /img/<id> serves library bitmaps and the drawing", async () => {
+		for (const id of [1, 2, 3, 4, 5, 6, 7]) {
+			const rows = (await text("/img/" + id)).split("\n");
+			expect(rows).toHaveLength(16);
+			expect(rows.every((v) => /^\d+$/.test(v) && Number(v) <= 65535)).toBe(true);
+		}
+		// test pattern: full top edge, border on the rest
+		expect((await text("/img/1")).split("\n")[0]).toBe("65535");
+		// 12 mirrors /custom
+		const rows = Array.from({ length: 16 }, (_, i) => (i * 257) & 0xffff);
+		await post("/custom", { rows });
+		expect(await text("/img/12")).toBe(rows.join("\n"));
+		for (const id of [0, 8, 9, 10, 11, 13, 99]) {
+			expect((await SELF.fetch(BASE + "/img/" + id)).status).toBe(404);
+		}
+	});
+
 	it("rejects bad input", async () => {
 		expect((await post("/custom", { rows: [1, 2, 3] })).status).toBe(400);
 		expect((await post("/custom", { rows: new Array(16).fill(70000) })).status).toBe(400);

@@ -11,6 +11,7 @@
 
 import { DRAW_PAGE } from "./DRAW_PAGE";
 import { PAGE } from "./PAGE";
+import { IMAGES } from "./IMAGES";
 import { DurableObject } from "cloudflare:workers";
 
 const DEFAULT_IMG = 0;      // 0 = clock mode (what we revert to)
@@ -140,6 +141,19 @@ export default {
       await panel.setCustom(rows);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...cors },
+      });
+    }
+
+    // --- Image library: the device fetches the bitmap for the id from /state ---
+    // Same format as /custom: 16 newline-separated uint16 rows, MSB = leftmost pixel.
+    const m = url.pathname.match(/^\/img\/(\d+)$/);
+    if (m && request.method === "GET") {
+      const id = Number(m[1]);
+      const rows = id === CUSTOM_IMG ? await panel.getCustom() : IMAGES[id];
+      if (!rows) return new Response("not found", { status: 404, headers: cors });
+      return new Response(rows.join("\n"), {
+        // Library images never change; the drawing (12) does.
+        headers: { "Content-Type": "text/plain", "Cache-Control": id === CUSTOM_IMG ? "no-store" : "public, max-age=3600", ...cors },
       });
     }
 
