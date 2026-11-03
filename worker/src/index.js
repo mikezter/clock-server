@@ -46,9 +46,15 @@ export class Panel extends DurableObject {
     return this.ctx.storage.kv.get("custom_img") ?? new Array(16).fill(0);
   }
 
+  // Bumped on every new drawing so the device can tell "same 12" from "new 12".
+  getRev() {
+    return this.ctx.storage.kv.get("custom_rev") ?? 0;
+  }
+
   // Store the drawing and show it, in one synchronous (atomic) step.
   setCustom(rows) {
     this.ctx.storage.kv.put("custom_img", rows);
+    this.ctx.storage.kv.put("custom_rev", this.getRev() + 1);
     this.ctx.storage.kv.put("state", { img: CUSTOM_IMG, expiresAt: null });
   }
 }
@@ -70,8 +76,11 @@ export default {
     // --- Device polls here ---
     if (url.pathname === "/state") {
       const img = await panel.getImg();
-      // Plain integer body keeps ESP8266 parsing trivial.
-      return new Response(String(img), {
+      // Plain integer keeps ESP8266 parsing trivial. For the free drawing the
+      // drawing's revision follows ("12 7"): the device refetches /img/12 only
+      // when it changes. atoi() on the body still reads just the image index.
+      const body = img === CUSTOM_IMG ? `${img} ${await panel.getRev()}` : String(img);
+      return new Response(body, {
         headers: { "Content-Type": "text/plain", "Cache-Control": "no-store", ...cors },
       });
     }

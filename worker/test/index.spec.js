@@ -42,7 +42,12 @@ describe("clock-server", () => {
 		const rows = Array.from({ length: 16 }, (_, i) => (i * 4099) & 0xffff);
 		expect((await post("/custom", { rows })).status).toBe(200);
 		expect(await text("/custom")).toBe(rows.join("\n"));
-		expect(await text("/state")).toBe("12");
+		const first = await text("/state");
+		expect(first).toMatch(/^12 \d+$/);
+		// a new drawing bumps the revision, re-showing the same one does not
+		expect(await text("/state")).toBe(first);
+		await post("/custom", { rows });
+		expect(await text("/state")).not.toBe(first);
 	});
 
 	it("GET /img/<id> serves library bitmaps and the drawing", async () => {
