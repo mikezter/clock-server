@@ -6,11 +6,16 @@ A Cloudflare Worker that lets me control an IKEA Obegränsad 16×16 LED matrix
 opening any ports. The device polls the Worker; the Worker never reaches in.
 
 ## Architecture
-- **Worker** (`worker.js`, deployed via wrangler) serves three things:
+- **Worker** (`src/index.js`, deployed via wrangler) serves:
   - `GET /`        → control webpage with buttons (the `PAGE` constant)
   - `GET /draw`    → 16×16 pixel editor webpage (the `DRAW_PAGE` constant)
   - `POST /set`    → sets displayed image; body `{img:<int>, ttl:<seconds>}`
+  - `POST /reset`  → back to the clock immediately (device dismiss signal)
   - `GET /state`   → device polls this every 5s; returns a plain-text integer
+  - `GET /img/<id>` → 16 newline-separated uint16 rows (MSB = leftmost pixel): ids 1..7
+    from `src/IMAGES.js` (taken from the firmware's old images.h), id 12 = the free
+    drawing; 404 otherwise. The device fetches the bitmap for the id it got from `/state`.
+  - `GET/POST /custom` → read / store the free drawing (POST also switches to image 12)
 - **Durable Object** `Panel` (binding `PANEL`, one instance `getByName("default")`,
   SQLite backend: the only DO backend on Workers Free). Stores `state`
   `{img, expiresAt}` and `custom_img` (16 rows) via `ctx.storage.kv`.
@@ -22,16 +27,16 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
 - Optional `TOKEN` secret gates `/set` via an `X-Token` header (currently unused).
 
 ## Device side (ESPHome, separate repo)
-- File: `esphome-web-e75bc4.yaml` in `~/esphome-ikea-led-matrix/esphome_devices/`
-- An `interval: 5s` does `http_request.get` on `/state` with
-  `verify_ssl: false` (ESP8266 TLS against rotating *.workers.dev certs is
-  fragile, so we don't pin).
-- Lambda parses the body and sets global `id(image)`, clamped to `id(max_img)`
-  (=11). Correct syntax for this ESPHome version: `response->status_code`
-  (NOT `response_code`), and `body` is in scope as a std::string.
-- Image indices: 0=clock 2=smiley 3=heart 4=cloud 5=sun 6=lightning
-  7=battery 8=matrix 9=tetris. Physical button + next_image script still work;
-  last cloud poll wins.
+- File: `obegraensad-clock.yaml` in `~/obegransand/esphome-ikea-led-matrix/` (script `sync_panel`, every 5 s).
+- It does `http_request.get` on `/state` (plain http; see that repo's CLAUDE.md for why), and only if
+  the id is a bitmap it does not have yet (or 12), a second `GET /img/<id>` in the same script,
+  never inside `on_response`.
+- Correct syntax for this ESPHome version: `response->status_code` (NOT `response_code`),
+  and `body` is in scope as a std::string.
+- Image indices: 0=clock 1=test 2=smiley 3=heart 4=cloud 5=sun 6=lightning 7=battery (bitmaps
+  from the Worker), 8=matrix 9=tetris 10=snake (animations in the firmware), 11=all white
+  (disabled), 12=free drawing. The physical button dismisses a shown image (POST /reset) or
+  steps the brightness.
 
 ## Pixel editor (DRAW_PAGE)
 - 16×16 grid, square cells, white-on-black theme.
@@ -46,8 +51,7 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
 ## Deploy
 `npx wrangler deploy`. Tests: `npx vitest run` (routes, expiry, custom drawing).
 
-## Next planned feature (not built yet)
-Send custom drawings to the clock at runtime: POST the 16 row-words to the
-Worker, store in KV, device fetches them and renders into a runtime buffer as
-a new "custom" display mode — no firmware recompile needed. 16 words is
-trivial for the ESP8266.
+## Next planned feature
+More library images (`src/IMAGES.js` + buttons in `PAGE.js`) now only need a Worker
+deploy, no firmware flash. The device could cache the last ~5 fetched bitmaps in RAM
+(5 × 32 B) to skip refetching.
