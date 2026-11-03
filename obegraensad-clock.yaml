@@ -63,10 +63,6 @@ globals:
     type: int
     restore_value: no
     initial_value: '4'        # 0=0%  1=20%  2=40%  3=60%  4=100%
-  - id: night_brightness
-    type: float
-    restore_value: no
-    initial_value: '0.15'     # ← calibrate: lowest visible level before LEDs cut off
   - id: manual_override_until
     type: uint32_t
     restore_value: no
@@ -190,6 +186,7 @@ light:
     id: display_light
     output: matrix_brightness
     restore_mode: ALWAYS_ON
+    min_power: 0.0667   # 17/255 — lowest PWM level that visibly lights the LEDs
 
 output:
   - platform: esp8266_pwm
@@ -262,16 +259,16 @@ interval:
           then:
             - lambda: |-
                 float elev = id(sun_component).elevation();
-                float nb = id(night_brightness);
                 float bri;
                 if (elev <= -6.0f) {
-                  bri = nb;
+                  bri = 0.0f;           // min_power (17/255) is the floor when on
                 } else if (elev >= 20.0f) {
                   bri = 1.0f;
                 } else {
-                  bri = nb + (1.0f - nb) * (elev + 6.0f) / 26.0f;
+                  bri = (elev + 6.0f) / 26.0f;
                 }
                 auto call = id(display_light).make_call();
+                call.set_state(true);   // re-enables if manually turned off after override expires
                 call.set_brightness(bri);
                 call.set_transition_length(60000);
                 call.perform();
