@@ -1,0 +1,164 @@
+# Minimal second device: shows only the time (NTP), dimmable via the button
+# on the panel and the web UI. No http_request, no Worker, no images.
+#
+# Clock drawing stays in the display lambda below (4 lines): a separate
+# component would add more code than it removes.
+
+esphome:
+  name: obegraensad-simple
+  friendly_name: IKEA OBEGRÄNSAD Simple
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [ obegraensad_panel ]
+
+esp8266:
+  board: d1_mini
+
+logger:
+
+# No Home Assistant needed: reboot_timeout 0s keeps the device from
+# rebooting every 15 min when no API client is connected.
+api:
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "Obegraensad Simple Fallback"
+    password: !secret ap_password
+
+# Only useful together with the fallback AP above: lets you enter new WiFi
+# credentials if the configured network is gone.
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+# Brightness calibration: PWM level 16/255 is still dark, 17/255 is the
+# lowest visible level. min_power maps level 0+ to 17/255, zero_means_zero
+# keeps 0 really off. The slider shows "PWM level - 16":
+#   0 = off, 1 = 17/255 (dimmest), ..., 239 = 255/255 (full).
+# No light entity (and so no gamma curve) in between, so slider value and
+# PWM level match 1:1. The on/off switch is derived from the slider
+# (on = slider > 0), so the two can never disagree.
+output:
+  - platform: esp8266_pwm
+    id: matrix_brightness
+    pin:
+      number: GPIO14
+      inverted: true
+    # 300 Hz flickers least: fewer PWM edges = fewer wrong pixels.
+    # 1 kHz (default) and 5 kHz were both worse. Do not change.
+    frequency: 300Hz
+    min_power: 0.0667   # 17/255
+    zero_means_zero: true
+
+globals:
+  - id: last_on_level
+    type: int
+    restore_value: no
+    initial_value: '239'   # slider value the switch turns back on to
+
+number:
+  - platform: template
+    id: brightness
+    name: "Helligkeit"
+    mode: slider
+    min_value: 0
+    max_value: 239
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 239
+    on_value:
+      - lambda: |-
+          int n = (int) x;
+          if (n > 0) id(last_on_level) = n;
+          // 1..239 -> 0..1, scaled by min_power to 17/255..255/255
+          id(matrix_brightness).set_level(n > 0 ? (n - 1) / 238.0f : 0.0f);
+
+switch:
+  - platform: template
+    name: "Anzeige"
+    lambda: 'return id(brightness).state > 0;'
+    turn_on_action:
+      - number.set:
+          id: brightness
+          value: !lambda 'return id(last_on_level);'
+    turn_off_action:
+      - number.set:
+          id: brightness
+          value: 0
+
+# Button stages (slider values): 0 (off) -> 1 -> 5 -> 20 -> 60 -> 239 -> 0 ...
+# Steps to the next stage above the current slider value, so it also
+# continues sensibly after the slider was moved by hand.
+script:
+  - id: next_stage
+    then:
+      - number.set:
+          id: brightness
+          value: !lambda |-
+            static const int stages[] = {1, 5, 20, 60, 239};
+            int cur = (int) id(brightness).state;
+            for (int s : stages)
+              if (s > cur) return s;
+            return 0;
+
+button:
+  - platform: template
+    name: "Dimmstufe weiter"
+    on_press:
+      - script.execute: next_stage
+
+binary_sensor:
+  - platform: gpio
+    id: panel_button
+    pin:
+      number: GPIO13
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - script.execute: next_stage
+
+time:
+  - platform: sntp
+    id: ntp_time
+    timezone: 'Europe/Berlin'
+
+font:
+  - file: "04B03.ttf"
+    id: b03
+    size: 8
+
+display:
+  - platform: obegraensad_panel
+    rotation: 90
+    latch_pin: 12
+    clock_pin: 04
+    data_pin: 05
+    update_interval: 100ms
+    lambda: |-
+      auto now = id(ntp_time).now();
+      if (now.is_valid()) {
+        it.strftime(4, 0, id(b03), "%H", now);
+        it.strftime(4, 8, id(b03), "%M", now);
+      } else {
+        it.print(4, 0, id(b03), "--");
+        it.print(4, 8, id(b03), "--");
+      }

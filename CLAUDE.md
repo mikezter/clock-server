@@ -4,7 +4,8 @@ ESPHome firmware for an IKEA Obegränsad 16×16 LED panel on a Wemos D1 Mini (ES
 
 ## Layout (flat; the repo root is the ESPHome config dir)
 
-- `obegraensad-clock.yaml`: the only device config (node `obegraensad-clock`, IP 192.168.1.100)
+- `obegraensad-clock.yaml`: the main device config (node `obegraensad-clock`, IP 192.168.1.100)
+- `obegraensad-simple.yaml`: minimal second device (node `obegraensad-simple`), clock only, no Worker/images; same pins and PWM settings
 - `images.h`: bitmaps + animations (`draw_image`, `draw_matrix`, `draw_tetris`, `draw_snake`), pulled in via `esphome: includes:`
 - `components/obegraensad_panel/`: the display driver (`display.py`, `obegraensad_panel.{h,cpp}`)
 - `secrets.yaml` (gitignored; template in `secrets.yaml.example`), `.esphome/` (build cache), `.device-builder*` (Device Builder state, gitignored)

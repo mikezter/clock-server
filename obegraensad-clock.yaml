@@ -192,6 +192,7 @@ output:
     # Enables brightness control.
     id: matrix_brightness
     min_power: 0.0667   # 17/255 — lowest PWM level that visibly lights the LEDs
+    frequency: 300Hz    # fewer PWM edges = fewer wrong pixels (5 kHz was worse than the 1 kHz default)
     pin:
       number: GPIO14
       inverted: True

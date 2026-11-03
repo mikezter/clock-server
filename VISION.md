@@ -10,12 +10,16 @@ A 16×16 binary LED matrix — IKEA Obegränsad, ~30€, white, ~30cm square —
 
 The software today is an ESPHome custom component. ESPHome is a YAML-driven firmware framework for ESP microcontrollers, primarily used with Home Assistant. It handles WiFi, OTA updates, an API layer, and a display buffer abstraction. The project plugs in as an external component that implements `DisplayBuffer`.
 
-The display currently shows:
-- A live clock (NTP-sourced, pixel font)
-- 7 hand-crafted 16×16 bitmaps (heart, smiley, sun, cloud, lightning bolt, battery, all-white)
-- 3 frame-based animations (matrix rain, Tetris, border snake)
+There are two device configs that share the same driver and wiring:
 
-Images are cycled via a physical button (GPIO13), via Home Assistant, or via the built-in ESPHome web server. Brightness is controlled by PWM on GPIO14 through the ESPHome monochromatic light component.
+- **`obegraensad-clock.yaml`** — the full device. The display shows:
+  - A live clock (NTP-sourced, pixel font)
+  - 7 hand-crafted 16×16 bitmaps (test pattern, smiley, heart, cloud, sun, lightning bolt, battery); an all-white image exists in `images.h` but is disabled (WiFi dropped while it was shown, probably from LED current draw — unverified)
+  - 3 frame-based animations (matrix rain, Tetris, border snake)
+  - A custom 16×16 drawing fetched from the Worker (image 12)
+
+  Which image shows is decided remotely: the device polls a Cloudflare Worker (`GET /state` every 5 s; 0 = clock). The physical button (GPIO13) returns to the clock while an image shows (and tells the Worker via `POST /reset`), otherwise it cycles brightness in five steps. Brightness is PWM on GPIO14 through the ESPHome monochromatic light component, with a sun-elevation-based automatic dimming that a manual button press overrides for an hour.
+- **`obegraensad-simple.yaml`** — a minimal clock-only device. See "The simple device" below.
 
 This is a functional, working tinkerer's project. The vision is to make it something more.
 
@@ -46,20 +50,46 @@ The panel can be given as a gift. The gifter sets it up, pairs it to their accou
 ### Current state
 
 ```
-[ESPHome YAML config]
-  |
-  ├── external_components: obegraensad_panel (this repo)
-  |     ├── display.py               — config schema + codegen
-  |     └── obegraensad_panel.cpp/.h — DisplayBuffer impl: serpentine LED mapping + shift-register output
-  |
-  ├── images.h                        — compile-time bitmaps + animations
-  ├── display lambda                  — selects image by global int `image`
-  ├── binary_sensor (GPIO13)          — physical button → next_image script
-  ├── light/output (GPIO14)           — PWM brightness via HA
-  └── web_server (port 80)            — local HTTP control
+components/obegraensad_panel/          — shared driver, loaded by both configs via
+  ├── display.py                         external_components (type: local, path: components)
+  └── obegraensad_panel.cpp/.h         — DisplayBuffer impl: serpentine LED mapping +
+                                         shift-out via ISRInternalGPIOPin
+
+obegraensad-clock.yaml  (full device)
+  ├── images.h (esphome: includes)     — compile-time bitmaps + animations
+  ├── display lambda                   — clock, or image selected by global int `image`
+  ├── interval 5s → http_request       — GET /state (and /custom for image 12) from the Worker
+  ├── binary_sensor (GPIO13)           — back to clock (POST /reset) or cycle brightness
+  ├── button "Back to Clock"           — same as the button while an image shows
+  ├── light/output (GPIO14)            — monochromatic light on esp8266_pwm, 300 Hz, min_power 17/255
+  ├── sun + interval 60s               — sun-elevation-based dimming
+  └── web_server v3 (port 80), api     — local control
+
+obegraensad-simple.yaml  (clock only)
+  ├── display lambda                   — clock only (~6 lines), no images.h
+  ├── output (GPIO14)                  — esp8266_pwm, 300 Hz, min_power 17/255, no light entity
+  ├── number "Helligkeit" 0..239       — sets the PWM level directly
+  ├── switch "Anzeige"                 — on/off, derived from the slider
+  ├── button "Dimmstufe weiter" + binary_sensor (GPIO13) — step through brightness stages
+  └── web_server v3 (port 80), api     — local control
 ```
 
-**Dependencies:** none beyond ESPHome core. The component has no `lib_deps`; it drives the pins through ESPHome's own `InternalGPIOPin`, so it builds on both the Arduino and ESP-IDF frameworks.
+The configs load the component from the local path, so driver edits need no push to a remote repo.
+
+**Remote image source (full device only):** a Cloudflare Worker (`clock-server.mikezter.workers.dev`, code in a separate repo) holds the current image index in a SQLite Durable Object. The device polls it over plain HTTP (a BearSSL handshake every 5 s tripped the ESP8266 Soft WDT); requests run strictly one after another, since two TLS sessions don't fit in the heap. This is a polling stand-in for the MQTT target below, not a replacement decision.
+
+**Dependencies:** none beyond ESPHome core. The component has no `lib_deps` (Adafruit GFX/BusIO were removed); it drives the pins through ESPHome's own `ISRInternalGPIOPin`. ESPAsyncTCP comes in via `web_server`, not via the driver.
+
+### The simple device
+
+`obegraensad-simple.yaml` (node `obegraensad-simple`) is the smallest useful firmware for the panel: it shows the time and nothing else. No `http_request`, no Worker, no images, no `images.h`, no sun automation. It works without Home Assistant (`api: reboot_timeout: 0s`) and is controlled through the panel button and the built-in web UI. Same pins as the full device.
+
+Its role: a baseline that is easy to reason about (e.g. when separating driver/PWM effects from network load), and a plain clock for a panel that doesn't need the signalling features.
+
+Decisions:
+- **Brightness calibration is kept.** PWM level 16/255 is still dark, 17/255 is the lowest visible level. The output uses `min_power: 17/255` with `zero_means_zero: true`. The slider "Helligkeit" runs 0..239 and shows "PWM level − 16": 0 = off, 1 = 17/255 (dimmest), 239 = 255/255 (full). It drives the output directly, without a light entity and therefore without a gamma curve, so slider value and PWM level match 1:1. The "Anzeige" switch is derived from the slider (on = slider > 0) and turns back on to the last non-zero value.
+- **Stepped dimming.** The panel button and the web UI button "Dimmstufe weiter" cycle through the stages 0 → 1 → 5 → 20 → 60 → 239 → 0. They jump to the next stage above the current slider value, so they continue sensibly after the slider was moved by hand.
+- **Clock code stays in the display lambda.** It is about six lines; a separate component would add more code than it removes.
 
 ---
 
@@ -129,6 +159,20 @@ This is the trickiest part of the driver. Any rewrite must preserve this mapping
 ### ESP8266 vs ESP32
 
 The current config targets an ESP8266 (D1 Mini). The ESP8266 services WiFi in software and can interrupt GPIO bit-banging mid-frame, causing display glitches. An ESP32 resolves this with hardware interrupt isolation and dual cores. For a product context, ESP32 is the better target.
+
+Hardware SPI on the ESP8266 would need clock on GPIO14 and data on GPIO13 (and `SPI.begin()` also claims GPIO12), which collides with the current PWM/button/latch pins. Switching means rewiring; on an ESP32 any pins work.
+
+### Flicker and brightness PWM (Nov 2026)
+
+Observed on the hardware (both configs use the same settings):
+
+- **PWM frequency:** `frequency: 300Hz` on the brightness output is the best setting found. The 1 kHz default was worse, 5 kHz clearly worse. Fewer PWM edges means fewer wrong pixels. Do not change it without testing on the panel.
+- **At partial brightness** some residual flicker remains: every few seconds 3–4 changes, only on pixels at longer transitions.
+- **At full brightness** the image is clean, even with all pixels on.
+
+**Hypothesis (not proven):** the PWM edges and the LED current steps couple into the clock/latch lines and cause spurious shifts or latches. This would fit the observations (worse with more edges, clean at 100 % where there are no edges), but it has not been measured. Possible hardware fixes, untested:
+- a small capacitor (~100 pF) to ground or a series resistor (~100 Ω) on clock and latch,
+- a decoupling capacitor at the panel's supply.
 
 ---
 
@@ -290,4 +334,4 @@ Move image definitions serverside. Firmware renders 32-byte MQTT payloads direct
 
 ---
 
-*Last updated: April 2026*
+*Last updated: November 2026*
