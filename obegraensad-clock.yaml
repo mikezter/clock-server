@@ -186,12 +186,12 @@ light:
     id: display_light
     output: matrix_brightness
     restore_mode: ALWAYS_ON
-    min_power: 0.0667   # 17/255 — lowest PWM level that visibly lights the LEDs
 
 output:
   - platform: esp8266_pwm
     # Enables brightness control.
     id: matrix_brightness
+    min_power: 0.0667   # 17/255 — lowest PWM level that visibly lights the LEDs
     pin:
       number: GPIO14
       inverted: True
