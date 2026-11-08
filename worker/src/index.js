@@ -78,7 +78,7 @@ export default {
       const img = await panel.getImg();
       // Plain integer keeps ESP8266 parsing trivial. For the free drawing the
       // drawing's revision follows ("12 7"): the device refetches /img/12 only
-      // when it changes. atoi() on the body still reads just the image index.
+      // when it changes. 
       const body = img === CUSTOM_IMG ? `${img} ${await panel.getRev()}` : String(img);
       return new Response(body, {
         headers: { "Content-Type": "text/plain", "Cache-Control": "no-store", ...cors },

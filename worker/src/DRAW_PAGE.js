@@ -6,56 +6,78 @@ export const DRAW_PAGE = `<!doctype html>
 <title>Obegränsad Pixel Editor</title>
 <style>
   :root { --bg:#0e1116; --card:#171c24; --line:#262e3a; --txt:#e6edf3;
-          --muted:#8b97a7; --accent:#ffffff; --on:#ffffff; --off:#1b2230; }
+          --muted:#8b97a7; --accent:#ffffff; --on:#ffffff; --off:#1b2230;
+          /* Panel geometry in cell units, scaled from the real panel
+             (pixel 0.5", h-gap 0.28125", v-gap 0.6875"):
+             column-gap = 0.5625 cell, row-gap = 1.375 cell, padding = 0.5 cell.
+             Total: width 16 + 15*0.5625 + 1 = 25.44 cells,
+                    height 16 + 15*1.375 + 1 = 37.63 cells.
+             The cell size is the largest that fits both the viewport width and
+             the height left over for header + buttons, capped at 24px. */
+          --chrome:150px;
+          --cell:min(24px, calc((100vw - 34px) / 25.44), calc((100vh - var(--chrome)) / 37.63)); }
+  @supports (height:100dvh) {
+    :root { --cell:min(24px, calc((100vw - 34px) / 25.44), calc((100dvh - var(--chrome)) / 37.63)); }
+  }
   * { box-sizing:border-box; }
+  html, body { background:var(--bg); }
   body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-         background:var(--bg); color:var(--txt); min-height:100vh;
-         display:flex; flex-direction:column; align-items:center; padding:24px 16px; }
-  h1 { font-size:20px; font-weight:600; margin:0 0 4px; }
-  p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; text-align:center; }
+         color:var(--txt); min-height:100vh;
+         display:flex; flex-direction:column; align-items:center; padding:12px 16px 24px; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
+  p.sub { color:var(--muted); margin:0 0 10px; font-size:12px; text-align:center; }
 
-  /* Geometry scaled from the real panel (pixel 0.5", h-gap 0.28125", v-gap 0.6875").
-     At cell=24px: column-gap = 24*0.5625 ≈ 14px, row-gap = 24*1.375 = 33px.
-     Reproduces the panel's ~27:40 rendering aspect ratio. */
   #panel { display:grid;
-           grid-template-columns:repeat(16, 24px);
-           grid-template-rows:repeat(16, 24px);
-           column-gap:14px;
-           row-gap:33px;
-           background:#000; padding:14px;
-           border-radius:12px; border:1px solid var(--line);
-           touch-action:none; user-select:none; }
-  .px { background:var(--off); border-radius:2px; cursor:crosshair; }
-  .px.on { background:var(--on); box-shadow:0 0 8px rgba(255,255,255,0.85); }
+           grid-template-columns:repeat(16, var(--cell));
+           grid-template-rows:repeat(16, var(--cell));
+           column-gap:calc(var(--cell) * 0.5625);
+           row-gap:calc(var(--cell) * 1.375);
+           padding:calc(var(--cell) * 0.5);
+           background:#000;
+           border-radius:10px; border:1px solid var(--line);
+           touch-action:none; user-select:none; -webkit-user-select:none;
+           -webkit-touch-callout:none; cursor:crosshair; }
+  .px { background:var(--off); border-radius:2px; pointer-events:none; }
+  .px.on { background:var(--on); box-shadow:0 0 calc(var(--cell) * 0.33) rgba(255,255,255,0.85); }
 
-  .bar { display:flex; gap:10px; margin:18px 0; flex-wrap:wrap; justify-content:center; }
+  .bar { display:flex; gap:8px; margin:10px 0 14px; justify-content:center;
+         width:100%; max-width:560px; }
   button { appearance:none; border:1px solid var(--line); background:var(--card);
-           color:var(--txt); font-size:14px; padding:10px 16px; border-radius:10px;
-           cursor:pointer; }
+           color:var(--txt); font-size:14px; padding:10px 12px; border-radius:10px;
+           cursor:pointer; touch-action:manipulation; flex:1 1 0; min-width:0;
+           white-space:nowrap; }
   button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#000; border-color:var(--accent);
+                   font-weight:600; flex-grow:1.6; }
+  button:disabled { opacity:.7; }
 
-  #out { width:100%; max-width:560px; background:#0a0d12; border:1px solid var(--line);
+  details { width:100%; max-width:560px; }
+  summary { color:var(--muted); font-size:13px; cursor:pointer; padding:6px 0; }
+  #out { background:#0a0d12; border:1px solid var(--line);
          border-radius:10px; padding:14px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-         font-size:12px; color:#b9c4d4; white-space:pre; overflow-x:auto; }
+         font-size:12px; color:#b9c4d4; white-space:pre; overflow-x:auto; margin-top:6px; }
   .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .bar.small button { font-size:13px; padding:8px 10px; }
 </style>
 </head>
 <body>
   <h1>Pixel Editor · 16×16</h1>
-  <p class="sub">Click or drag to paint · drag from a lit pixel to erase<br>
-     Spacing matches the real panel — wide vertical gaps between rows</p>
+  <p class="sub">Tap or drag to paint · start on a lit pixel to erase</p>
 
   <div id="panel"></div>
 
   <div class="bar">
     <button id="clear">Clear</button>
     <button id="invert">Invert</button>
-    <button id="copy">Copy C array</button>
-    <button id="send">Send to clock</button>
+    <button id="send" class="primary">Send to clock</button>
   </div>
 
-  <div id="out"></div>
-  <div class="hint">Paste this into <code>images.h</code> as a new <code>Image16x16</code>.</div>
+  <details>
+    <summary>C array</summary>
+    <div id="out"></div>
+    <div class="bar small"><button id="copy">Copy C array</button></div>
+    <div class="hint">Paste this into <code>images.h</code> as a new <code>Image16x16</code>.</div>
+  </details>
 
 <script>
   const N = 16;
@@ -69,7 +91,6 @@ export const DRAW_PAGE = `<!doctype html>
     for (let c = 0; c < N; c++) {
       const d = document.createElement("div");
       d.className = "px";
-      d.dataset.r = r; d.dataset.c = c;
       panel.appendChild(d);
       cells.push(d);
     }
@@ -77,38 +98,61 @@ export const DRAW_PAGE = `<!doctype html>
 
   let painting = false;
   let paintValue = 1; // set on pointerdown: 1 if target was off (=> paint), 0 if on (=> erase)
+  let last = null;    // last painted cell, for filling in fast strokes
 
   function setCell(r, c, v) {
     if (r < 0 || r >= N || c < 0 || c >= N) return;
     grid[r][c] = v;
-    const idx = r * N + c;
-    cells[idx].classList.toggle("on", v === 1);
+    cells[r * N + c].classList.toggle("on", v === 1);
   }
 
+  // Map a pointer position to the NEAREST cell, so touches landing in the
+  // (large) gaps between rows still count. Uses the centers of the first and
+  // last cell, so it follows whatever size the CSS gave the panel.
   function cellFromEvent(e) {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!el || !el.classList.contains("px")) return null;
-    return { r: +el.dataset.r, c: +el.dataset.c };
+    const a = cells[0].getBoundingClientRect();
+    const b = cells[N * N - 1].getBoundingClientRect();
+    const x0 = a.left + a.width / 2, y0 = a.top + a.height / 2;
+    const x1 = b.left + b.width / 2, y1 = b.top + b.height / 2;
+    const clamp = v => Math.max(0, Math.min(N - 1, v));
+    return {
+      r: clamp(Math.round((e.clientY - y0) / (y1 - y0) * (N - 1))),
+      c: clamp(Math.round((e.clientX - x0) / (x1 - x0) * (N - 1))),
+    };
+  }
+
+  // Paint every cell on the straight line from the last cell to p, so quick
+  // finger strokes do not leave holes.
+  function strokeTo(p) {
+    const from = last || p;
+    const steps = Math.max(Math.abs(p.r - from.r), Math.abs(p.c - from.c));
+    for (let i = 0; i <= steps; i++) {
+      const t = steps ? i / steps : 0;
+      setCell(Math.round(from.r + (p.r - from.r) * t),
+              Math.round(from.c + (p.c - from.c) * t), paintValue);
+    }
+    last = p;
+    render();
   }
 
   panel.addEventListener("pointerdown", e => {
     const p = cellFromEvent(e);
-    if (!p) return;
     painting = true;
-    paintValue = grid[p.r][p.c] === 1 ? 0 : 1; // toggle direction based on first cell
-    setCell(p.r, p.c, paintValue);
-    render();
+    last = null;
+    paintValue = grid[p.r][p.c] === 1 ? 0 : 1; // direction decided by first cell
+    strokeTo(p);
     panel.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
   panel.addEventListener("pointermove", e => {
     if (!painting) return;
     const p = cellFromEvent(e);
-    if (!p) return;
-    setCell(p.r, p.c, paintValue);
-    render();
+    if (last && p.r === last.r && p.c === last.c) return;
+    strokeTo(p);
   });
-  window.addEventListener("pointerup", () => { painting = false; });
+  const stop = () => { painting = false; last = null; };
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
 
   document.getElementById("clear").onclick = () => {
     for (let r=0;r<N;r++) for (let c=0;c<N;c++) setCell(r,c,0);
