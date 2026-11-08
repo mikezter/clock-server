@@ -28,7 +28,7 @@ The Device Builder is not installed as a service right now; run it against the r
 ## Driver invariants
 
 - The LED mapping (`LOOKUP_TOP`/`LOOKUP_BOTTOM` + `led_index()`) and the shift-out order must stay bit-exact: LED `i` lives at `frame_[i % 16]`, bit `i / 16`; words go out in order, LSB first, then a latch pulse. Getting this wrong scrambles the image.
-- The Nov 2026 rewrite was checked by a throwaway host test that recorded every pin write of the old Adafruit-based driver and the new one. For further driver changes, rebuild such a test against `git show e3eecef^:components/obegraensad_panel/obegraensad-driver.cpp` (stub `Arduino.h`/`Adafruit_GFX.h` and the ESPHome headers), and check that it fails on a deliberate bug.
+- The Nov 2026 rewrite was checked by a throwaway host test that recorded every pin write of the old Adafruit-based driver and the new one. For further driver changes, rebuild such a test against `git show 12d993d^:components/obegraensad_panel/obegraensad-driver.cpp` (stub `Arduino.h`/`Adafruit_GFX.h` and the ESPHome headers), and check that it fails on a deliberate bug.
 - The shift-out uses `ISRInternalGPIOPin` (direct register writes). `InternalGPIOPin::digital_write` on the ESP8266 goes through Arduino `digitalWrite` (with waveform/PWM checks), so keep it out of the hot loop. Keep the 1 µs clock/latch pulses unless tested on hardware.
 - Frames are sent on every update (100 ms) on purpose, so a glitched frame is fixed right away. Don't add "skip unchanged frames" without a periodic resend.
 - No `lib_deps`. Adafruit GFX/BusIO/Wire/SPI were removed; ESPAsyncTCP comes in via `web_server`.
