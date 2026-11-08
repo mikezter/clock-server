@@ -8,6 +8,7 @@ ESPHome firmware for an IKEA Obegränsad 16×16 LED panel on a Wemos D1 Mini (ES
 - `obegraensad-simple.yaml`: minimal second device (node `obegraensad-simple`), clock only, no Worker/images; same pins and PWM settings
 - `images.h`: only the frame-based animations now (`draw_matrix`, `draw_tetris`, `draw_snake`), pulled in via `esphome: includes:`. The static bitmaps moved to the Worker (`GET /img/<id>`); the old C arrays are in git history
 - `components/obegraensad_panel/`: the display driver (`display.py`, `obegraensad_panel.{h,cpp}`)
+- `climate/`: Go service `panel-climate` (user systemd unit, linked from here) that reads two SwitchBot meters (living room E0:A3:40:DB:F7:3C = dot 1 bottom left, freezer D7:35:34:35:17:7E = dot 2) via BlueZ D-Bus every 5 min and shows temp/humidity as drawing 12 for 1 min every 15 min, alternating every 15 s, then restores the previous state. Missing value = `--`, value older than 1 h = dot bottom right. A meter connected to the SwitchBot app (sync) stops advertising meanwhile. `systemctl --user reload panel-climate` = show now. Rebuild: `cd climate && go build -o panel-climate .`
 - `secrets.yaml` (gitignored; template in `secrets.yaml.example`), `.esphome/` (build cache), `.device-builder*` (Device Builder state, gitignored)
 - `.env/`: Python venv with `esphome` and `esphome-device-builder`
 

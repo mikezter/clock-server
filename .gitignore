@@ -148,3 +148,4 @@ cython_debug/
 /.esphome/
 /secrets.yaml
 /.device-builder*
+climate/panel-climate
