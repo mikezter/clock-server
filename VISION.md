@@ -143,7 +143,7 @@ Each image is a deliberate choice. The vocabulary should be small enough to be m
 
 The 8th slot is intentionally left open. One option: make it pair-specific — the gifter and recipient agree on what it means when they set up the panel.
 
-**Image format:** `uint16_t[16]`, 16 rows, MSB = leftmost pixel. Stored in the Worker (`src/IMAGES.js`, served at `GET /img/<id>`); the firmware only keeps the bitmap it currently shows. Each image is designed squat (horizontally compressed) to render correctly on the Obegränsad's ~2:1 vertical-to-horizontal pixel spacing.
+**Image format:** `uint16_t[16]`, 16 rows, MSB = leftmost pixel. Stored in the Worker (`worker/src/IMAGES.js`, served at `GET /img/<id>`); the firmware only keeps the bitmap it currently shows. Each image is designed squat (horizontally compressed) to render correctly on the Obegränsad's ~2:1 vertical-to-horizontal pixel spacing.
 
 ---
 

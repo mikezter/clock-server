@@ -3,7 +3,7 @@
 
 // Frame-based animations (matrix rain, Tetris, border snake), drawn by code.
 // The static 16x16 bitmaps (test, smiley, heart, ...) no longer live in the
-// firmware: the Worker serves them at GET /img/<id> (see clock-server/src/IMAGES.js;
+// firmware: the Worker serves them at GET /img/<id> (see worker/src/IMAGES.js;
 // the old C arrays are in git history, e.g. `git show HEAD:images.h`).
 
 // ============================================================
