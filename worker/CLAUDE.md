@@ -26,9 +26,9 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
   without timers is hibernation-eligible, so duration is only the ms per request.
 - Optional `TOKEN` secret gates `/set` via an `X-Token` header (currently unused).
 
-## Device side (ESPHome, separate repo)
-- File: `obegraensad-clock.yaml` in `~/obegransand/esphome-ikea-led-matrix/` (script `sync_panel`, every 5 s).
-- It does `http_request.get` on `/state` (plain http; see that repo's CLAUDE.md for why), and only if
+## Device side (ESPHome, repo root)
+- File: `../obegraensad-clock.yaml` (script `sync_panel`, every 5 s). Firmware docs: `../CLAUDE.md`.
+- It does `http_request.get` on `/state` (see `../CLAUDE.md` for the constraints), and only if
   the id is a bitmap it does not have yet (or 12), a second `GET /img/<id>` in the same script,
   never inside `on_response`.
 - Correct syntax for this ESPHome version: `response->status_code` (NOT `response_code`),
@@ -49,7 +49,7 @@ opening any ports. The device polls the Worker; the Worker never reaches in.
   to `(1 << c)` in render().
 
 ## Deploy
-`npx wrangler deploy`. Tests: `npx vitest run` (routes, expiry, custom drawing).
+`npx wrangler deploy` (from `worker/`). Tests: `npx vitest run` (routes, expiry, custom drawing).
 
 ## Next planned feature
 More library images (`src/IMAGES.js` + buttons in `PAGE.js`) now only need a Worker

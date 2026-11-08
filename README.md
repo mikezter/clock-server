@@ -1,4 +1,4 @@
-# ikea-led-matrix
+# clock-server
 
 256 pixels. Three wires. One message.
 
@@ -65,8 +65,8 @@ The display communicates via a serial shift register: bits are clocked in one at
 **Requirements:** ESPHome ≥ 2025.11.0, a D1 Mini, WiFi credentials.
 
 ```bash
-git clone https://github.com/mikezter/esphome-ikea-led-matrix
-cd esphome-ikea-led-matrix
+git clone https://github.com/mikezter/clock-server
+cd clock-server
 
 # Fill in your WiFi credentials
 cp secrets.yaml.example secrets.yaml
@@ -88,7 +88,7 @@ esphome:
   name: obegraensad-clock
 
 external_components:
-  - source: github://mikezter/esphome-ikea-led-matrix@master
+  - source: github://mikezter/clock-server@master
     components: [ obegraensad_panel ]
 
 esp8266:
@@ -145,6 +145,9 @@ images.h                 — the frame-based animations (bitmaps come from the W
 secrets.yaml.example     — template for secrets.yaml (gitignored)
 components/
   obegraensad_panel/     — ESPHome display component for the Obegränsad panel
+worker/                  — Cloudflare Worker: control page, pixel editor, /state, /img/<id>
+                           (cd worker && npx wrangler deploy)
+climate/                 — Go service: SwitchBot temperature/humidity on the panel
 ```
 
 ---
@@ -189,7 +192,7 @@ The serpentine LED mapping (the `LOOKUP_TOP` / `LOOKUP_BOTTOM` tables) is copied
 
 ## Lineage
 
-Forked from [phiten/esphome-ikea-led-matrix](https://github.com/phiten/esphome-ikea-led-matrix) (Frekvens driver by frumperino, Obegränsad port by phiten). Everything from upstream is merged; it has had no new commits since April 2024. The sascha-hemi fork, which earlier configs pulled the component from, is deleted. allenporter's fork, the only other active one (Oct 2026), keeps just the Frekvens driver; its Adafruit GFX removal was the reference for this rewrite. This repo dropped the Frekvens component.
+Started as a fork of [phiten/esphome-ikea-led-matrix](https://github.com/phiten/esphome-ikea-led-matrix) (Frekvens driver by frumperino, Obegränsad port by phiten). Everything from upstream is merged; it has had no new commits since April 2024. The sascha-hemi fork, which earlier configs pulled the component from, is deleted. allenporter's fork, the only other active one (Oct 2026), keeps just the Frekvens driver; its Adafruit GFX removal was the reference for this rewrite. This repo dropped the Frekvens component. In Nov 2026 the firmware repo (`mikezter/esphome-ikea-led-matrix`, now archived) and the Worker repo were merged into this one; the git history of both is kept.
 
 ---
 

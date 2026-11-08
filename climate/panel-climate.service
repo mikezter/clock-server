@@ -3,7 +3,7 @@ Description=Obegränsad: SwitchBot temperature/humidity on the panel every 15 mi
 After=network-online.target bluetooth.target
 
 [Service]
-ExecStart=%h/obegransand/esphome-ikea-led-matrix/climate/panel-climate
+ExecStart=%h/obegransand/clock-server/climate/panel-climate
 # systemctl --user reload panel-climate  -> show the cached values now
 ExecReload=/bin/kill -USR1 $MAINPID
 Restart=always
